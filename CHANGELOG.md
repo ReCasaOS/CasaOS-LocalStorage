@@ -2,7 +2,7 @@
 
 All notable changes to CasaOS LocalStorage are documented here.
 
-## [0.4.36] - 2026-09-13
+## [0.4.37] - 2026-09-13
 
 ### Fixed
 
