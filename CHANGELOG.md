@@ -2,6 +2,16 @@
 
 All notable changes to CasaOS LocalStorage are documented here.
 
+## [0.4.36] - 2026-09-13
+
+### Fixed
+
+- **Loopback is not an identity.** Any request from 127.0.0.1 skipped the token. Loopback is not this box's services alone: a container on the host network, or any local account, reaches the same addresses. A request skips the token only when it is one of this box's services, which come from loopback with the secret the gateway writes for this boot (`/var/run/casaos/internal.secret`, readable by root only); the dashboard always had a token. This service formats, mounts and merges disks as root. Its own calls to the core (the storage status every five seconds, the shares of a removed disk) carry the secret through the shared clients.
+
+### Changed
+
+- echo 4.15 with echo-jwt, x/crypto 0.57, x/net 0.59, Go 1.26.
+
 ## [0.4.34] - 2026-09-10
 
 ### Changed
