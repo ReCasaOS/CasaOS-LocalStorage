@@ -2,6 +2,12 @@
 
 All notable changes to CasaOS LocalStorage are documented here.
 
+## [0.4.40] - 2026-09-15
+
+### Fixed
+
+- **Built without UPX, this time for real.** 0.4.38 said the binaries were no longer packed with UPX. They were: the change never reached `.goreleaser.yaml`, so every amd64 and armv7 build since kept going through UPX 3.96. A packed binary exits with status 127 when its stub cannot unpack itself, which is how app-management failed its first start on the install checks of v0.4.83 and v0.4.88, with nothing logged. The hooks are gone now.
+
 ## [0.4.39] - 2026-09-15
 
 ### Fixed
