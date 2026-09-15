@@ -121,18 +121,10 @@ func GetDiskList(ctx echo.Context) error {
 			continue
 		}
 
-		isAvail := true
-		if len(currentDisk.MountPoint) != 0 {
-			isAvail = false
-		} else {
-			for _, v := range currentDisk.Children {
-				if v.MountPoint != "" {
-					isAvail = false
-				}
-			}
-		}
-
-		if isAvail {
+		// Only direct children used to be looked at for a mount point, so a disk
+		// whose partitions were RAID members, or held a volume group, was offered
+		// for formatting.
+		if !service.DiskInUse(currentDisk) {
 			disk.NeedFormat = false
 			avail = append(avail, disk)
 		}

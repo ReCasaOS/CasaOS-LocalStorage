@@ -2,6 +2,13 @@
 
 All notable changes to CasaOS LocalStorage are documented here.
 
+## [0.4.39] - 2026-09-15
+
+### Fixed
+
+- **A RAID array is one storage.** lsblk lists an MD array again under every disk it is built on, and the storage list walked every disk for its mounted filesystems: a RAID10 of four disks was four storages holding the same filesystem, in Storage Manager, in the file manager's sidebar and wherever a storage is picked. The list now comes from a view of the same tree in which an array is a storage of its own, named after its level, or System when it holds /; each mounted filesystem is listed once; and a disk that only lends itself to an array does not appear. Where space is added up across disks, which happens when / cannot be found, each filesystem counts once. From IceWhaleTech/CasaOS-LocalStorage#72, ported onto this distribution's storage accounting.
+- **A disk is offered for formatting only when nothing on it is in use.** Only a disk's direct children were checked for a mount point, so a disk whose partitions were RAID members, or held a volume group with a mounted logical volume, was listed as available. A mount or swap anywhere below it, or a RAID, LVM or ZFS member anywhere in it, keeps it out of the list.
+
 ## [0.4.38] - 2026-09-13
 
 ### Fixed

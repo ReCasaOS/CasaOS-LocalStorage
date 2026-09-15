@@ -38,19 +38,18 @@ func sendDiskBySocket() {
 		}
 	}
 
-	// Keep a useful fallback for systems where lsblk cannot identify "/".
-	// This still aggregates mounted filesystems recursively, without treating
-	// a partition or LVM container as consumed file space.
+	// Keep a useful fallback for systems where lsblk cannot identify "/": the
+	// space of every mounted filesystem on a supported disk, each counted once,
+	// since lsblk lists a RAID array again under every disk it is built on.
 	if !systemDiskFound {
+		supported := make([]model.LSBLKModel, 0, len(blkList))
 		for _, currentDisk := range blkList {
-			if !service.IsDiskSupported(currentDisk) {
-				continue
+			if service.IsDiskSupported(currentDisk) {
+				supported = append(supported, currentDisk)
 			}
-			stats := service.MountedFilesystemStats(currentDisk)
-			status.Size += stats.Size
-			status.Avail += stats.Avail
-			status.Used += stats.Used
 		}
+		stats := service.StorageUsage(supported)
+		status.Size, status.Avail, status.Used = stats.Size, stats.Avail, stats.Used
 	}
 
 	status.SmartStatus = model.AggregateSmartHealth(healths...)
