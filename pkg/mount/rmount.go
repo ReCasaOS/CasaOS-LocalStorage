@@ -2,6 +2,7 @@ package mount
 
 import (
 	"fmt"
+	"time"
 
 	"bazil.org/fuse"
 	fusefs "bazil.org/fuse/fs"
@@ -11,13 +12,13 @@ import (
 	"github.com/rclone/rclone/vfs"
 )
 
-func MountFn(VFS *vfs.VFS, mountpoint string, opt *mountlib.Options) (<-chan error, func() error, error) {
+func MountFn(VFS *vfs.VFS, mountpoint string, opt *mountlib.Options) (<-chan error, func() error, string, error) {
 
 	f := VFS.Fs()
 	fs.Debugf(f, "Mounting on %q", mountpoint)
 	c, err := fuse.Mount(mountpoint, mountOptions(VFS, opt.DeviceName, opt)...)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	filesys := NewFS(VFS, opt)
 	filesys.server = fusefs.New(c, nil)
@@ -38,7 +39,7 @@ func MountFn(VFS *vfs.VFS, mountpoint string, opt *mountlib.Options) (<-chan err
 		filesys.VFS.Shutdown()
 		return fuse.Unmount(mountpoint)
 	}
-	return errChan, unmount, nil
+	return errChan, unmount, mountpoint, nil
 
 }
 func NewFS(VFS *vfs.VFS, opt *mountlib.Options) *FS {
@@ -91,7 +92,7 @@ func mountOptions(VFS *vfs.VFS, device string, opt *mountlib.Options) (options [
 		options = append(options, fuse.WritebackCache())
 	}
 	if opt.DaemonTimeout != 0 {
-		options = append(options, fuse.DaemonTimeout(fmt.Sprint(int(opt.DaemonTimeout.Seconds()))))
+		options = append(options, fuse.DaemonTimeout(fmt.Sprint(int(time.Duration(opt.DaemonTimeout).Seconds()))))
 	}
 	if len(opt.ExtraOptions) > 0 {
 		fs.Errorf(nil, "-o/--option not supported with this FUSE backend")
