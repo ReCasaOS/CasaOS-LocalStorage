@@ -105,7 +105,7 @@ func (c *store) MessageBus() *message_bus.ClientWithResponses {
 
 		c.Server = messageBusAddress
 		return nil
-	})
+	}, message_bus.WithRequestEditorFn(external.InternalRequestEditor(config.CommonInfo.RuntimePath)))
 
 	return client
 }
