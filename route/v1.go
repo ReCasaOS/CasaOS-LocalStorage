@@ -30,7 +30,6 @@ func InitV1Router() http.Handler {
 	e.Use(echo_middleware.Recover())
 	e.Use(echo_middleware.Logger())
 
-	// r.GET("/v1/recover/:type", v1.GetRecoverStorage)
 	v1Group := e.Group("/v1")
 
 	v1Group.Use(echojwt.WithConfig(echojwt.Config{
@@ -78,17 +77,6 @@ func InitV1Router() http.Handler {
 
 			v1StorageGroup.DELETE("", v1.DeleteStorage)
 			v1StorageGroup.GET("", v1.GetStorageList)
-		}
-		v1CloudGroup := v1Group.Group("/cloud")
-		v1CloudGroup.Use()
-		{
-			v1CloudGroup.GET("", v1.ListStorages)
-			v1CloudGroup.DELETE("", v1.UmountStorage)
-		}
-		v1DriverGroup := v1Group.Group("/driver")
-		v1DriverGroup.Use()
-		{
-			v1DriverGroup.GET("", v1.ListDriverInfo)
 		}
 		v1USBGroup := v1Group.Group("/usb")
 		v1USBGroup.Use()

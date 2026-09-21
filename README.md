@@ -18,7 +18,7 @@ The service listens on a loopback port chosen at start-up and registers these pa
 | `/v2/local_storage` | merges (`/merge`, `/merge/init`) and mounts (`/mount`) |
 | `/doc/v2/local_storage` | the OpenAPI document for the v2 API, and its viewer |
 
-Every request needs a CasaOS JWT unless it comes from loopback. The Dropbox and Google Drive routes (`/v1/cloud`, `/v1/driver`) are still in the router but are not registered with the gateway, so nothing reaches them.
+Every request needs a CasaOS JWT, unless it comes from loopback with `Authorization: Internal <secret>`, the per-boot secret the gateway writes to `<runtime path>/internal.secret`. Cloud drives (`/v1/cloud`, `/v1/driver`, `/v1/recover`) are served by the CasaOS core service, not by this one.
 
 Disk hotplug arrives from the kernel over a netlink uevent socket. The service publishes `local-storage:storage_status` and `local-storage:merge_status`, plus per-device disk and USB events, on CasaOS-MessageBus.
 

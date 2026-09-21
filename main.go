@@ -120,11 +120,6 @@ func init() {
 
 	checkToken2_11()
 	//service.MyService.Disk().EnsureDefaultMergePoint()
-
-	// service.MountLists = make(map[string]*mountlib.MountPoint)
-	// configfile.Install()
-	// service.MyService.Storage().CheckAndMountAll()
-
 }
 
 func checkToken2_11() {
@@ -197,9 +192,6 @@ func main() {
 		"/v1/usb",
 		"/v1/disks",
 		"/v1/storage",
-		// "/v1/cloud",
-		// "/v1/recover",
-		// "/v1/driver",
 		route.V2APIPath,
 		route.V2DocPath,
 	}
