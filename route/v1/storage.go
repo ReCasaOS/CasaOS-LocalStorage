@@ -98,14 +98,19 @@ func GetStorageList(ctx echo.Context) error {
 }
 
 func PostAddStorage(ctx echo.Context) error {
-	js := make(map[string]interface{})
-	if err := ctx.Bind(&js); err != nil {
+	// Typed rather than a map: a field of the wrong type is Bind's 400, where the
+	// map's type assertions panicked, and a missing one is its zero value -- an
+	// empty path is refused below, before any disk is touched.
+	var request struct {
+		Path   string `json:"path"`
+		Name   string `json:"name"`
+		Format bool   `json:"format"`
+	}
+	if err := ctx.Bind(&request); err != nil {
 		return ctx.JSON(http.StatusBadRequest, model.Result{Success: common_err.INVALID_PARAMS, Message: common_err.GetMsg(common_err.INVALID_PARAMS), Data: err.Error()})
 	}
 
-	path := js["path"].(string)
-	name := js["name"].(string)
-	format := js["format"].(bool)
+	path, name, format := request.Path, request.Name, request.Format
 
 	if len(path) == 0 {
 		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.INVALID_PARAMS, Message: common_err.GetMsg(common_err.INVALID_PARAMS)})

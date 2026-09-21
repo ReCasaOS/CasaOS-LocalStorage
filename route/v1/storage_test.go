@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	model1 "github.com/ReCasaOS/CasaOS-LocalStorage/model"
@@ -178,6 +179,29 @@ func TestGetDiskListNeverOffersAnArrayMemberForFormatting(t *testing.T) {
 		}
 		if len(body.Data.Avail) != 1 || body.Data.Avail[0].Path != "/dev/sdx" {
 			t.Fatalf("partitioned=%v: only the empty disk is offered: %+v", partitioned, body.Data.Avail)
+		}
+	}
+}
+
+// The body of the call that formats a disk used to be read with type assertions,
+// so a field of the wrong type, or a missing path, panicked in the handler. Each
+// is a bad request now, answered before anything reaches a disk -- the services
+// are not even set up here, so a call that went further would fail the test.
+func TestAMalformedAddStorageRequestIsABadRequest(t *testing.T) {
+	for _, body := range []string{
+		`{"path": "/dev/sdb", "name": "data", "format": "yes"}`,
+		`{"path": 42, "name": "data", "format": false}`,
+		`{"name": "data"}`,
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/v1/storage", strings.NewReader(body))
+		request.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+
+		if err := PostAddStorage(echo.New().NewContext(request, rec)); err != nil {
+			t.Fatalf("%s: %v", body, err)
+		}
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status %d, want 400: %s", body, rec.Code, rec.Body.String())
 		}
 	}
 }
