@@ -155,16 +155,20 @@ func StorageUsage(disks []model.LSBLKModel) FilesystemStats {
 }
 
 // DiskInUse says whether a disk holds anything that must not be offered for
-// formatting: a filesystem or swap mounted anywhere below it, or a part of it
-// that belongs to a RAID array, a volume group or a ZFS pool, whether or not
-// that array, group or pool is assembled right now.
+// formatting: a filesystem or swap mounted anywhere below it, a part of it that
+// belongs to a RAID array, a volume group or a ZFS pool, whether or not that
+// array, group or pool is assembled right now, or an encrypted volume (LUKS,
+// BitLocker), open or not. A locked container mounts nothing and its format is
+// not one CasaOS reads, so formatting was the only thing offered for it.
 func DiskInUse(disk model.LSBLKModel) bool {
 	switch {
 	case disk.MountPoint != "",
 		strings.HasPrefix(disk.Type, "raid"),
 		disk.FsType == "linux_raid_member",
 		disk.FsType == "LVM2_member",
-		disk.FsType == "zfs_member":
+		disk.FsType == "zfs_member",
+		disk.FsType == "crypto_LUKS",
+		disk.FsType == "BitLocker":
 		return true
 	}
 	for _, child := range disk.Children {

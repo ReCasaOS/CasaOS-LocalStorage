@@ -173,6 +173,12 @@ func TestADiskIsInUseWhenAnythingBelowItIs(t *testing.T) {
 		"a partition in a volume group": {Children: []model.LSBLKModel{{FsType: "LVM2_member"}}},
 		"a ZFS pool member":             {FsType: "zfs_member"},
 		"swap on a partition":           {Children: []model.LSBLKModel{{MountPoint: "[SWAP]"}}},
+		"a locked LUKS partition":       {Children: []model.LSBLKModel{{FsType: "crypto_LUKS"}}},
+		"a BitLocker partition":         {Children: []model.LSBLKModel{{FsType: "BitLocker"}}},
+		// LUKS, then dm-crypt, then LVM, then ext4 mounted from fstab (upstream #73's box)
+		"an opened LUKS stack": {Children: []model.LSBLKModel{{FsType: "crypto_LUKS", Children: []model.LSBLKModel{
+			{Type: "crypt", FsType: "LVM2_member", Children: []model.LSBLKModel{{Type: "lvm", FsType: "ext4", MountPoint: "/mnt/sata"}}},
+		}}}},
 	} {
 		if !DiskInUse(disk) {
 			t.Errorf("%s: offered for formatting", name)
