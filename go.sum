@@ -1,6 +1,6 @@
 github.com/RaveNoX/go-jsoncommentstrip v1.0.0/go.mod h1:78ihd09MekBnJnxpICcwzCMzGrKSKYe4AqU6PDYYpjk=
-github.com/ReCasaOS/CasaOS-Common v0.4.26 h1:aefnl58xQ4z0ga0+vBnQHmkG1/3fnd1C1W/EBFeAgvc=
-github.com/ReCasaOS/CasaOS-Common v0.4.26/go.mod h1:HjYCcRAVDa0c/IncJDof1sddCpze2esCTZt941Sk7LI=
+github.com/ReCasaOS/CasaOS-Common v0.4.31 h1:j0+PVY2suHW/StJ69MnDwBk+1rdS19ysxBuOsedK8Tc=
+github.com/ReCasaOS/CasaOS-Common v0.4.31/go.mod h1:HjYCcRAVDa0c/IncJDof1sddCpze2esCTZt941Sk7LI=
 github.com/STARRY-S/zip v0.2.3 h1:luE4dMvRPDOWQdeDdUxUoZkzUIpTccdKdhHHsQJ1fm4=
 github.com/STARRY-S/zip v0.2.3/go.mod h1:lqJ9JdeRipyOQJrYSOtpNAiaesFO6zVDsE8GIGFaoSk=
 github.com/andybalholm/brotli v1.2.2 h1:HzTuoo2ErYQqf5qvcJInB8uvqSVxRttzkFexPWtnceM=
