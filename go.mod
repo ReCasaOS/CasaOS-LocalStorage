@@ -3,7 +3,7 @@ module github.com/ReCasaOS/CasaOS-LocalStorage
 go 1.26.8
 
 require (
-	github.com/ReCasaOS/CasaOS-Common v0.4.31
+	github.com/ReCasaOS/CasaOS-Common v0.4.32
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/deepmap/oapi-codegen v1.12.4
 	github.com/getkin/kin-openapi v0.149.0
