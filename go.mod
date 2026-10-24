@@ -10,7 +10,7 @@ require (
 	github.com/glebarez/sqlite v1.8.0
 	github.com/json-iterator/go v1.1.12
 	github.com/labstack/echo-jwt/v4 v4.4.0
-	github.com/labstack/echo/v4 v4.15.4
+	github.com/labstack/echo/v4 v4.16.1
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pilebones/go-udev v0.9.0
@@ -87,7 +87,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.org/x/crypto v0.57.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
