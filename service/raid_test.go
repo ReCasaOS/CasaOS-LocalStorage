@@ -73,7 +73,7 @@ var partitionLinks = map[string]string{
 
 func TestTheStateOfAnArrayIsReadFromSysfs(t *testing.T) {
 	sys := sysfs(t, merge(partitions,
-		array("0", map[string]string{"level": "raid1", "array_state": "clean", "raid_disks": "2", "degraded": "0", "sync_action": "idle", "sync_completed": "none"},
+		array("0", map[string]string{"level": "raid1", "array_state": "clean", "raid_disks": "2", "degraded": "0", "sync_action": "idle", "sync_completed": "none", "component_size": "976630464"},
 			map[string][2]string{"sdb1": {"in_sync", "0"}, "sdc1": {"in_sync", "1"}}),
 		array("1", map[string]string{"level": "raid1", "array_state": "clean", "raid_disks": "2", "degraded": "1", "sync_action": "idle"},
 			map[string][2]string{"sdb1": {"in_sync", "0"}}),
@@ -96,7 +96,7 @@ func TestTheStateOfAnArrayIsReadFromSysfs(t *testing.T) {
 		t.Fatalf("%d arrays: %+v", len(arrays), arrays)
 	}
 
-	if a := got["md0"]; a.State != "ok" || a.Path != "/dev/md0" || a.Level != "raid1" || a.Disks != 2 || a.Missing != 0 || a.Progress != -1 || a.Remaining != -1 ||
+	if a := got["md0"]; a.State != "ok" || a.Path != "/dev/md0" || a.Level != "raid1" || a.Disks != 2 || a.Missing != 0 || a.Progress != -1 || a.Remaining != -1 || a.ComponentSize != 976630464*1024 ||
 		!reflect.DeepEqual(a.Members, []RAIDMember{{"sdb1", "sdb", "active"}, {"sdc1", "sdc", "active"}}) {
 		t.Errorf("a healthy mirror: %+v", a)
 	}

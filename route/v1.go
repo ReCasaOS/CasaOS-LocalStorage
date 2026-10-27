@@ -67,6 +67,8 @@ func InitV1Router() http.Handler {
 			v1DisksGroup.DELETE("", v1.DeleteDisksUmount)
 			v1DisksGroup.GET("/size", v1.GetDiskSize)
 			v1DisksGroup.GET("/raid", v1.GetRAIDArrays)
+			v1DisksGroup.POST("/raid/:name/disks", v1.PostRAIDDisk)
+			v1DisksGroup.DELETE("/raid/:name/disks/:member", v1.DeleteRAIDDisk)
 		}
 
 		v1StorageGroup := v1Group.Group("/storage")

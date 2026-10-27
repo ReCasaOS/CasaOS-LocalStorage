@@ -22,6 +22,9 @@ type RAIDArray struct {
 	// it lacks now (failed, removed or being rebuilt).
 	Disks   int `json:"disks"`
 	Missing int `json:"missing"`
+	// ComponentSize is the bytes each member gives the array: a disk added
+	// must hold at least that.
+	ComponentSize int64 `json:"component_size"`
 	// Action is what the array is doing (idle, recover, resync, check, repair,
 	// reshape), Progress its percent and Remaining the seconds left; -1 when
 	// there is none or it cannot be told.
@@ -50,15 +53,17 @@ func RAIDArrays(sys string) []RAIDArray {
 		}
 		name := filepath.Base(filepath.Dir(mdDir))
 		array := RAIDArray{
-			Name:      name,
-			Path:      "/dev/" + name,
-			Level:     level,
-			Disks:     atoiSys(mdDir, "raid_disks"),
-			Missing:   atoiSys(mdDir, "degraded"),
-			Action:    readSys(mdDir, "sync_action"),
-			Progress:  -1,
-			Remaining: -1,
-			Members:   raidMembers(sys, mdDir),
+			Name:    name,
+			Path:    "/dev/" + name,
+			Level:   level,
+			Disks:   atoiSys(mdDir, "raid_disks"),
+			Missing: atoiSys(mdDir, "degraded"),
+			// component_size is in KiB
+			ComponentSize: int64(atoiSys(mdDir, "component_size")) * 1024,
+			Action:        readSys(mdDir, "sync_action"),
+			Progress:      -1,
+			Remaining:     -1,
+			Members:       raidMembers(sys, mdDir),
 		}
 		if array.Action == "" {
 			array.Action = "idle"
