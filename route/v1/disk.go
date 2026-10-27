@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -217,6 +218,71 @@ func DeleteDisksUmount(ctx echo.Context) error {
 // the kernel shows them: read only.
 func GetRAIDArrays(ctx echo.Context) error {
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: service.RAIDArrays("/sys")})
+}
+
+// raidAnswer answers a refused or failed repair: what the person can fix
+// (no such array, a disk that cannot join, mdadm missing) as 400 or 409, the
+// rest as 500. The reason is in Message and Data, for the dashboard to show.
+func raidAnswer(ctx echo.Context, err error) error {
+	status := http.StatusInternalServerError
+	switch {
+	case errors.Is(err, service.ErrNoRAIDArray):
+		status = http.StatusNotFound
+	case errors.Is(err, service.ErrRAIDDiskNotFree), errors.Is(err, service.ErrRAIDDiskTooSmall), errors.Is(err, service.ErrRAIDNotFaulty):
+		status = http.StatusBadRequest
+	case errors.Is(err, service.ErrRAIDWhole), errors.Is(err, service.ErrRAIDNotRunning), errors.Is(err, service.ErrNoMDADM):
+		status = http.StatusConflict
+	}
+	return ctx.JSON(status, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error(), Data: err.Error()})
+}
+
+// PostRAIDDisk wipes a blank disk and adds it to an array that lacks one. The
+// body names the disk twice, its path and its name typed again by the person
+// ({"path": "/dev/sdd", "confirm": "sdd"}): it is erased.
+func PostRAIDDisk(ctx echo.Context) error {
+	var request struct {
+		Path    string `json:"path"`
+		Confirm string `json:"confirm"`
+	}
+	if err := ctx.Bind(&request); err != nil || request.Path == "" || request.Confirm != strings.TrimPrefix(request.Path, "/dev/") {
+		return ctx.JSON(http.StatusBadRequest, model.Result{Success: common_err.INVALID_PARAMS, Message: "the disk's name was not typed again", Data: "the disk's name was not typed again"})
+	}
+	if _, ok := diskMap[request.Path]; ok {
+		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.DISK_BUSYING, Message: common_err.GetMsg(common_err.DISK_BUSYING)})
+	}
+	diskMap[request.Path] = "busying"
+	defer delete(diskMap, request.Path)
+	defer service.MyService.Disk().RemoveLSBLKCache()
+
+	array, err := service.RAIDArrayNamed("/sys", ctx.Param("name"))
+	if err != nil {
+		return raidAnswer(ctx, err)
+	}
+	disk, err := service.RAIDCandidate(service.MyService.Disk().LSBLK(false), request.Path, array.ComponentSize)
+	if err != nil {
+		return raidAnswer(ctx, err)
+	}
+	if err := service.AddRAIDDisk(array, disk); err != nil {
+		logger.Error("error when adding a disk to a RAID array", zap.Error(err), zap.String("array", array.Path), zap.String("disk", disk.Path))
+		return raidAnswer(ctx, err)
+	}
+	array, _ = service.RAIDArrayNamed("/sys", array.Name)
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: array})
+}
+
+// DeleteRAIDDisk takes a failed disk (its member name, sdc1) out of an array.
+func DeleteRAIDDisk(ctx echo.Context) error {
+	array, err := service.RAIDArrayNamed("/sys", ctx.Param("name"))
+	if err != nil {
+		return raidAnswer(ctx, err)
+	}
+	if err := service.RemoveRAIDDisk(array, ctx.Param("member")); err != nil {
+		logger.Error("error when taking a disk out of a RAID array", zap.Error(err), zap.String("array", array.Path), zap.String("member", ctx.Param("member")))
+		return raidAnswer(ctx, err)
+	}
+	defer service.MyService.Disk().RemoveLSBLKCache()
+	array, _ = service.RAIDArrayNamed("/sys", array.Name)
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: array})
 }
 
 func GetDiskSize(ctx echo.Context) error {
