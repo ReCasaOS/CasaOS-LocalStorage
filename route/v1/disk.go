@@ -213,6 +213,12 @@ func DeleteDisksUmount(ctx echo.Context) error {
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: path})
 }
 
+// GetRAIDArrays lists the software RAID arrays (md) and the state of each, as
+// the kernel shows them: read only.
+func GetRAIDArrays(ctx echo.Context) error {
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: service.RAIDArrays("/sys")})
+}
+
 func GetDiskSize(ctx echo.Context) error {
 	path := ctx.QueryParam("path")
 	if len(path) == 0 {
