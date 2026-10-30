@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	exec2 "github.com/ReCasaOS/CasaOS-Common/utils/exec"
 	"github.com/ReCasaOS/CasaOS-LocalStorage/model"
 )
 
@@ -84,7 +85,29 @@ func TestNothingIsWipedForAnArrayThatCannotBeMade(t *testing.T) {
 	}
 }
 
-const installMDADM = "env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=120 install -y -q --no-install-recommends mdadm"
+const installMDADM = "apt-get install mdadm"
+
+// The real command: noninteractive through the environment and not through an argument, which command.ExecuteCommand refuses as a shell assignment.
+func TestTheInstallationOfMDADMIsNoninteractiveWithoutAnAssignmentArgument(t *testing.T) {
+	cmd := aptInstallCommand("mdadm")
+	want := []string{"apt-get", "-o", "DPkg::Lock::Timeout=120", "install", "-y", "-q", "--no-install-recommends", "mdadm"}
+	if !reflect.DeepEqual(cmd.Args, want) {
+		t.Errorf("args %q", cmd.Args)
+	}
+	found := false
+	for _, e := range cmd.Env {
+		found = found || e == "DEBIAN_FRONTEND=noninteractive"
+	}
+	if !found {
+		t.Error("DEBIAN_FRONTEND is not set for apt-get")
+	}
+	for _, arg := range cmd.Args {
+		// the check command.ExecuteCommand applies to every argument
+		if err := exec2.Command("echo", arg).Err; err != nil {
+			t.Errorf("%q would be refused by the shell-injection check: %v", arg, err)
+		}
+	}
+}
 
 // A box without mdadm gets it installed before the first disk is wiped, and goes on.
 func TestMDADMIsInstalledWhenTheBoxLacksIt(t *testing.T) {
@@ -92,7 +115,7 @@ func TestMDADMIsInstalledWhenTheBoxLacksIt(t *testing.T) {
 	installed := false
 	record := raidRun
 	raidRun = func(name string, args ...string) error {
-		installed = installed || name == "env"
+		installed = installed || name == "apt-get"
 		return record(name, args...)
 	}
 	hasMDADM = func() bool { return installed }
@@ -108,7 +131,7 @@ func TestMDADMIsInstalledWhenTheBoxLacksIt(t *testing.T) {
 
 // Whether apt fails or leaves no mdadm behind, nothing is wiped.
 func TestNoDiskIsWipedWhenMDADMCannotBeInstalled(t *testing.T) {
-	for name, fail := range map[string]string{"apt fails": "env", "apt succeeds and leaves none": ""} {
+	for name, fail := range map[string]string{"apt fails": "apt-get", "apt succeeds and leaves none": ""} {
 		ran := recordRuns(t, false, fail)
 		_, err := CreateRAIDArray(nil, "raid1", []model.LSBLKModel{blankDisk("sdb"), blankDisk("sdc")})
 		if !errors.Is(err, ErrNoMDADM) || !reflect.DeepEqual(*ran, []string{installMDADM}) {
