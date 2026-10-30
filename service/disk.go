@@ -593,7 +593,7 @@ func (d *diskService) CheckSerialDiskMount() {
 				continue
 			}
 
-			mountPoint = partitions[0].LSBLKProperties["MOUNTPOINT"]
+			mountPoint = actualMountPoint(partitions, func() string { return d.GetDiskInfo(blkChild.Path).MountPoint })
 
 			if mountPoint != m {
 				v := model2.Volume{
@@ -606,6 +606,15 @@ func (d *diskService) CheckSerialDiskMount() {
 			}
 		}
 	}
+}
+
+// actualMountPoint is where the first partition of a device is mounted. A device that holds its filesystem itself (a RAID array has no partition table) has no partition at
+// all, and indexing it panicked the unit that mounts the storages again at boot: the storages after it stayed unmounted. The device is then asked for its own mount point.
+func actualMountPoint(partitions []partition.Partition, ofDevice func() string) string {
+	if len(partitions) == 0 {
+		return ofDevice()
+	}
+	return partitions[0].LSBLKProperties["MOUNTPOINT"]
 }
 
 func (d *diskService) GetUSBDriveStatusList() []model.USBDriveStatus {
