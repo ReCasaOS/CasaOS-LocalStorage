@@ -74,7 +74,7 @@ func TestAnArrayThatCannotBeMadeLeavesTheDisksAlone(t *testing.T) {
 		"the system disk":            {"raid1", `["/dev/sdb", "/dev/sda"]`},
 		"a disk that holds a volume": {"raid1", `["/dev/sdb", "/dev/sde"]`},
 		"a disk this box lacks":      {"raid1", `["/dev/sdb", "/dev/nope"]`},
-		"raid0":                      {"raid0", `["/dev/sdb", "/dev/sdc"]`},
+		"raid0 without consent":      {"raid0", `["/dev/sdb", "/dev/sdc"]`},
 		"linear":                     {"linear", `["/dev/sdb", "/dev/sdc"]`},
 		"no level":                   {"", `["/dev/sdb", "/dev/sdc"]`},
 		"raid5 on two disks":         {"raid5", `["/dev/sdb", "/dev/sdc"]`},
@@ -89,6 +89,18 @@ func TestAnArrayThatCannotBeMadeLeavesTheDisksAlone(t *testing.T) {
 		if len(diskMap) != 0 {
 			t.Errorf("%s: disks still guarded: %v", name, diskMap)
 		}
+	}
+}
+
+// A RAID 0 that is agreed to is still held to the rest of the checks.
+func TestARaid0ThatIsAgreedToStillNeedsItsDisks(t *testing.T) {
+	useStubDisk(t, raidStubDisk{})
+	body := `{"name": "fast", "level": "raid0", "disks": ["/dev/sdb"], "confirm": "fast", "accept_data_loss": true}`
+	if code, _ := postRAIDArray(t, body); code != http.StatusBadRequest {
+		t.Errorf("status %d, want 400", code)
+	}
+	if len(diskMap) != 0 {
+		t.Errorf("disks still guarded: %v", diskMap)
 	}
 }
 

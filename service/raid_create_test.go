@@ -38,6 +38,7 @@ func TestEachLevelIsMadeAtItsOwnNumberOfDisks(t *testing.T) {
 		disks []string
 		want  string
 	}{
+		"raid0":  {[]string{"sdb", "sdc"}, "mdadm --create /dev/md0 --run --metadata=1.2 --level=0 --raid-devices=2 /dev/sdb /dev/sdc"},
 		"raid5":  {[]string{"sdb", "sdc", "sdd"}, "mdadm --create /dev/md0 --run --metadata=1.2 --level=5 --raid-devices=3 /dev/sdb /dev/sdc /dev/sdd"},
 		"raid6":  {[]string{"sdb", "sdc", "sdd", "sde"}, "mdadm --create /dev/md0 --run --metadata=1.2 --level=6 --raid-devices=4 /dev/sdb /dev/sdc /dev/sdd /dev/sde"},
 		"raid10": {[]string{"sdb", "sdc", "sdd", "sde"}, "mdadm --create /dev/md0 --run --metadata=1.2 --level=10 --raid-devices=4 /dev/sdb /dev/sdc /dev/sdd /dev/sde"},
@@ -65,11 +66,11 @@ func TestNothingIsWipedForAnArrayThatCannotBeMade(t *testing.T) {
 		disks []model.LSBLKModel
 		want  error
 	}{
-		"raid0 loses all with one disk":  {true, "raid0", two, ErrRAIDLevel},
 		"linear is not offered":          {true, "linear", two, ErrRAIDLevel},
 		"no level":                       {true, "", two, ErrRAIDLevel},
 		"raid5 needs three disks":        {true, "raid5", two, ErrRAIDTooFewDisks},
 		"raid1 needs two disks":          {true, "raid1", two[:1], ErrRAIDTooFewDisks},
+		"raid0 needs two disks":          {true, "raid0", two[:1], ErrRAIDTooFewDisks},
 		"a disk named twice":             {true, "raid1", []model.LSBLKModel{two[0], two[0]}, ErrRAIDSameDisk},
 		"raid10 needs four disks, not 3": {true, "raid10", append(two, blankDisk("sdd")), ErrRAIDTooFewDisks},
 		"raid6 needs four disks, not 3":  {true, "raid6", append(two, blankDisk("sdd")), ErrRAIDTooFewDisks},
