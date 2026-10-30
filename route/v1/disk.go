@@ -230,7 +230,7 @@ func raidAnswer(ctx echo.Context, err error) error {
 	case errors.Is(err, service.ErrNoRAIDArray):
 		status = http.StatusNotFound
 	case errors.Is(err, service.ErrRAIDDiskNotFree), errors.Is(err, service.ErrRAIDDiskTooSmall), errors.Is(err, service.ErrRAIDNotFaulty),
-		errors.Is(err, service.ErrRAIDLevel), errors.Is(err, service.ErrRAIDTooFewDisks), errors.Is(err, service.ErrRAIDSameDisk):
+		errors.Is(err, service.ErrRAIDLevel), errors.Is(err, service.ErrRAIDTooFewDisks), errors.Is(err, service.ErrRAIDSameDisk), errors.Is(err, service.ErrRAIDConsent):
 		status = http.StatusBadRequest
 	case errors.Is(err, service.ErrRAIDWhole), errors.Is(err, service.ErrRAIDNotRunning), errors.Is(err, service.ErrNoMDADM):
 		status = http.StatusConflict
@@ -280,12 +280,17 @@ func PostRAIDArray(ctx echo.Context) error {
 		Level   string   `json:"level"`
 		Disks   []string `json:"disks"`
 		Confirm string   `json:"confirm"`
+		// AcceptDataLoss is what a RAID 0 asks for in addition: it has no protection
+		AcceptDataLoss bool `json:"accept_data_loss"`
 	}
 	if err := ctx.Bind(&request); err != nil || request.Name == "" || request.Confirm != request.Name {
 		return ctx.JSON(http.StatusBadRequest, model.Result{Success: common_err.INVALID_PARAMS, Message: "the name of the storage was not typed again", Data: "the name of the storage was not typed again"})
 	}
 	if len(request.Name) > storageLabelMaxLength || !storageLabelPattern.MatchString(request.Name) {
 		return ctx.JSON(http.StatusBadRequest, model.Result{Success: common_err.INVALID_PARAMS, Message: "a storage name is letters, digits and underscores, 16 at most", Data: "a storage name is letters, digits and underscores, 16 at most"})
+	}
+	if request.Level == "raid0" && !request.AcceptDataLoss {
+		return raidAnswer(ctx, service.ErrRAIDConsent)
 	}
 	for _, path := range request.Disks {
 		if _, ok := diskMap[path]; ok {

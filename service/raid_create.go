@@ -9,16 +9,18 @@ import (
 	"github.com/ReCasaOS/CasaOS-LocalStorage/model"
 )
 
-// Making a software RAID array out of blank disks, with mdadm. The levels offered are those that go on when a disk fails.
+// Making a software RAID array out of blank disks, with mdadm. The levels offered are those that go on when a disk fails, and raid0, which does not: it is for
+// data that can be made again (a cache, a scratch folder), and whoever asks for it has to say that one failed disk loses everything on it (ErrRAIDConsent).
 
 var (
 	ErrRAIDLevel       = errors.New("this RAID level is not offered")
 	ErrRAIDTooFewDisks = errors.New("too few disks for this RAID level")
 	ErrRAIDSameDisk    = errors.New("a disk is named twice")
+	ErrRAIDConsent     = errors.New("RAID 0 has no protection: one failed disk loses everything on it (accept_data_loss says you know)")
 )
 
-// RAIDLevels is the least number of disks an array of each level is made of. raid0 and linear are not here: one failed disk loses everything on them.
-var RAIDLevels = map[string]int{"raid1": 2, "raid5": 3, "raid6": 4, "raid10": 4}
+// RAIDLevels is the least number of disks an array of each level is made of. linear is not here: it has no gain over raid0 and loses as much.
+var RAIDLevels = map[string]int{"raid0": 2, "raid1": 2, "raid5": 3, "raid6": 4, "raid10": 4}
 
 // CreateRAIDArray wipes the disks (what RAIDCandidate gave) and makes one array of them at level, under the first mdN that arrays does not hold. It answers the array's
 // path (/dev/md0); the array starts to synchronize at once and can be used meanwhile.
