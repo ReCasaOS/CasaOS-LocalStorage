@@ -20,7 +20,7 @@ var (
 	ErrRAIDNotFaulty    = errors.New("only a failed disk can be taken out of an array")
 	ErrRAIDDiskNotFree  = errors.New("the disk is not a blank disk of this box: it is the system disk, holds something, or is not supported")
 	ErrRAIDDiskTooSmall = errors.New("the disk is smaller than the other disks of the array")
-	ErrNoMDADM          = errors.New("mdadm is not installed (sudo apt install mdadm)")
+	ErrNoMDADM          = errors.New("mdadm is not installed and could not be installed (sudo apt install mdadm)")
 )
 
 // raidRun runs a command for the repair, a var for the tests.
@@ -33,6 +33,23 @@ var raidRun = func(name string, args ...string) error {
 var hasMDADM = func() bool {
 	_, err := exec.LookPath("mdadm")
 	return err == nil
+}
+
+// ensureMDADM installs mdadm with apt when the box lacks it: whoever asks for an array has asked for it, and being told to run apt at a prompt is the command line
+// that all this is meant to spare. Only Debian and Ubuntu have apt-get; anywhere else the answer is ErrNoMDADM.
+func ensureMDADM() error {
+	if hasMDADM() {
+		return nil
+	}
+	// noninteractive: mdadm's package asks where to mail alerts, and nobody is there to answer
+	err := raidRun("env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "-o", "DPkg::Lock::Timeout=120", "install", "-y", "-q", "--no-install-recommends", "mdadm")
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrNoMDADM, err)
+	}
+	if !hasMDADM() {
+		return ErrNoMDADM
+	}
+	return nil
 }
 
 // RAIDArrayNamed is the array called name (md0), as RAIDArrays reads it.
@@ -75,8 +92,8 @@ func AddRAIDDisk(array RAIDArray, disk model.LSBLKModel) error {
 	if array.Missing == 0 && !hasFaulty(array) {
 		return ErrRAIDWhole
 	}
-	if !hasMDADM() {
-		return ErrNoMDADM
+	if err := ensureMDADM(); err != nil {
+		return err
 	}
 	if err := wipeRAIDDisk(disk); err != nil {
 		return err
@@ -98,8 +115,8 @@ func RemoveRAIDDisk(array RAIDArray, member string) error {
 	if !found {
 		return ErrRAIDNotFaulty
 	}
-	if !hasMDADM() {
-		return ErrNoMDADM
+	if err := ensureMDADM(); err != nil {
+		return err
 	}
 	if err := raidRun("mdadm", "--manage", array.Path, "--remove", "/dev/"+member); err != nil {
 		return fmt.Errorf("taking %s out of %s: %w", member, array.Path, err)

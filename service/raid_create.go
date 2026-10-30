@@ -37,8 +37,8 @@ func CreateRAIDArray(arrays []RAIDArray, level string, disks []model.LSBLKModel)
 		}
 		seen[d.Path] = true
 	}
-	if !hasMDADM() {
-		return "", ErrNoMDADM
+	if err := ensureMDADM(); err != nil {
+		return "", err
 	}
 	for _, d := range disks {
 		if err := wipeRAIDDisk(d); err != nil {

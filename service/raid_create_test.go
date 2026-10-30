@@ -70,7 +70,6 @@ func TestNothingIsWipedForAnArrayThatCannotBeMade(t *testing.T) {
 		"raid5 needs three disks":        {true, "raid5", two, ErrRAIDTooFewDisks},
 		"raid1 needs two disks":          {true, "raid1", two[:1], ErrRAIDTooFewDisks},
 		"a disk named twice":             {true, "raid1", []model.LSBLKModel{two[0], two[0]}, ErrRAIDSameDisk},
-		"mdadm is not installed":         {false, "raid1", two, ErrNoMDADM},
 		"raid10 needs four disks, not 3": {true, "raid10", append(two, blankDisk("sdd")), ErrRAIDTooFewDisks},
 		"raid6 needs four disks, not 3":  {true, "raid6", append(two, blankDisk("sdd")), ErrRAIDTooFewDisks},
 		"no disk at all":                 {true, "raid1", nil, ErrRAIDTooFewDisks},
@@ -81,6 +80,39 @@ func TestNothingIsWipedForAnArrayThatCannotBeMade(t *testing.T) {
 		}
 		if len(*ran) != 0 {
 			t.Errorf("%s: ran %v", name, *ran)
+		}
+	}
+}
+
+const installMDADM = "env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=120 install -y -q --no-install-recommends mdadm"
+
+// A box without mdadm gets it installed before the first disk is wiped, and goes on.
+func TestMDADMIsInstalledWhenTheBoxLacksIt(t *testing.T) {
+	ran := recordRuns(t, false, "")
+	installed := false
+	record := raidRun
+	raidRun = func(name string, args ...string) error {
+		installed = installed || name == "env"
+		return record(name, args...)
+	}
+	hasMDADM = func() bool { return installed }
+
+	path, err := CreateRAIDArray(nil, "raid1", []model.LSBLKModel{blankDisk("sdb"), blankDisk("sdc")})
+	if err != nil || path != "/dev/md0" {
+		t.Fatalf("%q %v", path, err)
+	}
+	if len(*ran) < 3 || (*ran)[0] != installMDADM || (*ran)[1] != "wipefs --all /dev/sdb" {
+		t.Errorf("ran %q", *ran)
+	}
+}
+
+// Whether apt fails or leaves no mdadm behind, nothing is wiped.
+func TestNoDiskIsWipedWhenMDADMCannotBeInstalled(t *testing.T) {
+	for name, fail := range map[string]string{"apt fails": "env", "apt succeeds and leaves none": ""} {
+		ran := recordRuns(t, false, fail)
+		_, err := CreateRAIDArray(nil, "raid1", []model.LSBLKModel{blankDisk("sdb"), blankDisk("sdc")})
+		if !errors.Is(err, ErrNoMDADM) || !reflect.DeepEqual(*ran, []string{installMDADM}) {
+			t.Errorf("%s: %v, ran %q", name, err, *ran)
 		}
 	}
 }
