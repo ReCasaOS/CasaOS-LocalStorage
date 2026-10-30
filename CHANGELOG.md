@@ -2,6 +2,13 @@
 
 All notable changes to CasaOS LocalStorage are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **`CASAOS_LSBLK_FILE`** (development): when set, `ExecLSBLK` returns that file instead of running host `lsblk`. `ExecLSBLKByPath` filters the same document.
+- **`CASAOS_FAKE_STORAGE=1`** (development): `mount`, `umount`, `parted`, `partprobe`, `e2label` and `sfdisk` return success without exec. Production is unchanged when the variables are unset.
+
 ## [0.4.40] - 2026-09-15
 
 ### Fixed
