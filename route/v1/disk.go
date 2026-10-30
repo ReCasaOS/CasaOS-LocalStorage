@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/ReCasaOS/CasaOS-Common/utils/logger"
 	"github.com/ReCasaOS/CasaOS-LocalStorage/common"
 	model1 "github.com/ReCasaOS/CasaOS-LocalStorage/model"
+	"github.com/ReCasaOS/CasaOS-LocalStorage/pkg/config"
 	"github.com/ReCasaOS/CasaOS-LocalStorage/service"
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -230,9 +232,10 @@ func raidAnswer(ctx echo.Context, err error) error {
 	case errors.Is(err, service.ErrNoRAIDArray):
 		status = http.StatusNotFound
 	case errors.Is(err, service.ErrRAIDDiskNotFree), errors.Is(err, service.ErrRAIDDiskTooSmall), errors.Is(err, service.ErrRAIDNotFaulty),
-		errors.Is(err, service.ErrRAIDLevel), errors.Is(err, service.ErrRAIDTooFewDisks), errors.Is(err, service.ErrRAIDSameDisk), errors.Is(err, service.ErrRAIDConsent):
+		errors.Is(err, service.ErrRAIDLevel), errors.Is(err, service.ErrRAIDTooFewDisks), errors.Is(err, service.ErrRAIDSameDisk), errors.Is(err, service.ErrRAIDConsent),
+		errors.Is(err, service.ErrRAIDNotMirror), errors.Is(err, service.ErrRAIDFilesystem):
 		status = http.StatusBadRequest
-	case errors.Is(err, service.ErrRAIDWhole), errors.Is(err, service.ErrRAIDNotRunning), errors.Is(err, service.ErrNoMDADM):
+	case errors.Is(err, service.ErrRAIDWhole), errors.Is(err, service.ErrRAIDNotRunning), errors.Is(err, service.ErrNoMDADM), errors.Is(err, service.ErrRAIDNotSettled):
 		status = http.StatusConflict
 	}
 	return ctx.JSON(status, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error(), Data: err.Error()})
@@ -266,6 +269,71 @@ func PostRAIDDisk(ctx echo.Context) error {
 	}
 	if err := service.AddRAIDDisk(array, disk); err != nil {
 		logger.Error("error when adding a disk to a RAID array", zap.Error(err), zap.String("array", array.Path), zap.String("disk", disk.Path))
+		return raidAnswer(ctx, err)
+	}
+	array, _ = service.RAIDArrayNamed("/sys", array.Name)
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: array})
+}
+
+// raidBackupFile is where mdadm may keep the copy of the data it cannot move in place during a reshape: on the system disk, never on the array.
+func raidBackupFile(array string) string {
+	return filepath.Join(config.AppInfo.DBPath, "raid-"+array+".backup")
+}
+
+// PostRAIDLevel changes the RAID 1 of two disks called :name to a RAID 5, with a third disk that is blank and erased. The body names the level and the disk twice,
+// its path and its name typed again by the person ({"level": "raid5", "path": "/dev/sdd", "confirm": "sdd"}). It answers once the reshape has started; it goes on
+// in the background, and the array reads "reshaping" until it is over. RAID 5 is the only level offered.
+func PostRAIDLevel(ctx echo.Context) error {
+	var request struct {
+		Level   string `json:"level"`
+		Path    string `json:"path"`
+		Confirm string `json:"confirm"`
+	}
+	if err := ctx.Bind(&request); err != nil || request.Path == "" || request.Confirm != strings.TrimPrefix(request.Path, "/dev/") {
+		return ctx.JSON(http.StatusBadRequest, model.Result{Success: common_err.INVALID_PARAMS, Message: "the disk's name was not typed again", Data: "the disk's name was not typed again"})
+	}
+	if request.Level != "raid5" {
+		return raidAnswer(ctx, service.ErrRAIDLevel)
+	}
+	if _, ok := diskMap[request.Path]; ok {
+		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.DISK_BUSYING, Message: common_err.GetMsg(common_err.DISK_BUSYING)})
+	}
+	diskMap[request.Path] = "busying"
+	defer delete(diskMap, request.Path)
+	defer service.MyService.Disk().RemoveLSBLKCache()
+
+	array, err := service.RAIDArrayNamed("/sys", ctx.Param("name"))
+	if err != nil {
+		return raidAnswer(ctx, err)
+	}
+	disk, err := service.RAIDCandidate(service.MyService.Disk().LSBLK(false), request.Path, array.ComponentSize)
+	if err != nil {
+		return raidAnswer(ctx, err)
+	}
+	if err := service.RAIDToRAID5(array, disk, raidBackupFile(array.Name)); err != nil {
+		logger.Error("error when changing a RAID array to RAID 5", zap.Error(err), zap.String("array", array.Path), zap.String("disk", disk.Path))
+		return raidAnswer(ctx, err)
+	}
+	array, _ = service.RAIDArrayNamed("/sys", array.Name)
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: array})
+}
+
+// PostRAIDFilesystem makes the filesystem on the array :name take all the room the array has, which it has more of after a reshape. It answers 409 while the array
+// is not healthy and idle, and 400 for a filesystem that is not ext2, ext3 or ext4.
+func PostRAIDFilesystem(ctx echo.Context) error {
+	array, err := service.RAIDArrayNamed("/sys", ctx.Param("name"))
+	if err != nil {
+		return raidAnswer(ctx, err)
+	}
+	if _, ok := diskMap[array.Path]; ok {
+		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.DISK_BUSYING, Message: common_err.GetMsg(common_err.DISK_BUSYING)})
+	}
+	diskMap[array.Path] = "busying"
+	defer delete(diskMap, array.Path)
+	defer service.MyService.Disk().RemoveLSBLKCache()
+
+	if err := service.GrowRAIDFilesystem(array, service.MyService.Disk().GetDiskInfo(array.Path).FsType, raidBackupFile(array.Name)); err != nil {
+		logger.Error("error when growing the filesystem of a RAID array", zap.Error(err), zap.String("array", array.Path))
 		return raidAnswer(ctx, err)
 	}
 	array, _ = service.RAIDArrayNamed("/sys", array.Name)

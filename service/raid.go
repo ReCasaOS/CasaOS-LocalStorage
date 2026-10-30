@@ -25,6 +25,10 @@ type RAIDArray struct {
 	// ComponentSize is the bytes each member gives the array: a disk added
 	// must hold at least that.
 	ComponentSize int64 `json:"component_size"`
+	// Size is the bytes the array itself holds (what a filesystem on it can use),
+	// Bitmap whether it keeps a write-intent bitmap.
+	Size   int64 `json:"size"`
+	Bitmap bool  `json:"bitmap"`
 	// Action is what the array is doing (idle, recover, resync, check, repair,
 	// reshape), Progress its percent and Remaining the seconds left; -1 when
 	// there is none or it cannot be told.
@@ -60,10 +64,13 @@ func RAIDArrays(sys string) []RAIDArray {
 			Missing: atoiSys(mdDir, "degraded"),
 			// component_size is in KiB
 			ComponentSize: int64(atoiSys(mdDir, "component_size")) * 1024,
-			Action:        readSys(mdDir, "sync_action"),
-			Progress:      -1,
-			Remaining:     -1,
-			Members:       raidMembers(sys, mdDir),
+			// size is in sectors of 512 bytes, and next to md/, not in it
+			Size:      int64(atoiSys(filepath.Dir(mdDir), "size")) * 512,
+			Bitmap:    hasBitmap(mdDir),
+			Action:    readSys(mdDir, "sync_action"),
+			Progress:  -1,
+			Remaining: -1,
+			Members:   raidMembers(sys, mdDir),
 		}
 		if array.Action == "" {
 			array.Action = "idle"
@@ -79,6 +86,12 @@ func RAIDArrays(sys string) []RAIDArray {
 	}
 	sort.Slice(arrays, func(i, j int) bool { return arrays[i].Name < arrays[j].Name })
 	return arrays
+}
+
+// hasBitmap says whether the array keeps a write-intent bitmap: md/bitmap/location says "none" when it does not.
+func hasBitmap(mdDir string) bool {
+	location := readSys(filepath.Join(mdDir, "bitmap"), "location")
+	return location != "" && location != "none"
 }
 
 func raidState(arrayState string, a RAIDArray) string {
