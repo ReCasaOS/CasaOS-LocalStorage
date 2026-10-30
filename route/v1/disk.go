@@ -2,6 +2,7 @@ package v1
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -228,7 +229,8 @@ func raidAnswer(ctx echo.Context, err error) error {
 	switch {
 	case errors.Is(err, service.ErrNoRAIDArray):
 		status = http.StatusNotFound
-	case errors.Is(err, service.ErrRAIDDiskNotFree), errors.Is(err, service.ErrRAIDDiskTooSmall), errors.Is(err, service.ErrRAIDNotFaulty):
+	case errors.Is(err, service.ErrRAIDDiskNotFree), errors.Is(err, service.ErrRAIDDiskTooSmall), errors.Is(err, service.ErrRAIDNotFaulty),
+		errors.Is(err, service.ErrRAIDLevel), errors.Is(err, service.ErrRAIDTooFewDisks), errors.Is(err, service.ErrRAIDSameDisk):
 		status = http.StatusBadRequest
 	case errors.Is(err, service.ErrRAIDWhole), errors.Is(err, service.ErrRAIDNotRunning), errors.Is(err, service.ErrNoMDADM):
 		status = http.StatusConflict
@@ -267,6 +269,62 @@ func PostRAIDDisk(ctx echo.Context) error {
 		return raidAnswer(ctx, err)
 	}
 	array, _ = service.RAIDArrayNamed("/sys", array.Name)
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: array})
+}
+
+// PostRAIDArray makes an array of the blank disks it names, puts a filesystem on it and mounts it as a storage called name, as Create Storage does for one disk.
+// The disks are erased: the body repeats the name ({"name": "Data", "confirm": "Data", "level": "raid1", "disks": ["/dev/sdb", "/dev/sdc"]}).
+func PostRAIDArray(ctx echo.Context) error {
+	var request struct {
+		Name    string   `json:"name"`
+		Level   string   `json:"level"`
+		Disks   []string `json:"disks"`
+		Confirm string   `json:"confirm"`
+	}
+	if err := ctx.Bind(&request); err != nil || request.Name == "" || request.Confirm != request.Name {
+		return ctx.JSON(http.StatusBadRequest, model.Result{Success: common_err.INVALID_PARAMS, Message: "the name of the storage was not typed again", Data: "the name of the storage was not typed again"})
+	}
+	if len(request.Name) > storageLabelMaxLength || !storageLabelPattern.MatchString(request.Name) {
+		return ctx.JSON(http.StatusBadRequest, model.Result{Success: common_err.INVALID_PARAMS, Message: "a storage name is letters, digits and underscores, 16 at most", Data: "a storage name is letters, digits and underscores, 16 at most"})
+	}
+	for _, path := range request.Disks {
+		if _, ok := diskMap[path]; ok {
+			return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.DISK_BUSYING, Message: common_err.GetMsg(common_err.DISK_BUSYING)})
+		}
+	}
+	for _, path := range request.Disks {
+		diskMap[path] = "busying"
+	}
+	defer func() {
+		for _, path := range request.Disks {
+			delete(diskMap, path)
+		}
+	}()
+	defer service.MyService.Disk().RemoveLSBLKCache()
+
+	blk := service.MyService.Disk().LSBLK(false)
+	disks := make([]model1.LSBLKModel, 0, len(request.Disks))
+	for _, path := range request.Disks {
+		disk, err := service.RAIDCandidate(blk, path, 0)
+		if err != nil {
+			return raidAnswer(ctx, err)
+		}
+		disks = append(disks, disk)
+	}
+	arrayPath, err := service.CreateRAIDArray(service.RAIDArrays("/sys"), request.Level, disks)
+	if err != nil {
+		logger.Error("error when making a RAID array", zap.Error(err), zap.String("level", request.Level), zap.Strings("disks", request.Disks))
+		return raidAnswer(ctx, err)
+	}
+	// from here the disks are erased and the array exists: say which step failed, for the person to finish by hand
+	if err := service.MyService.Disk().FormatDisk(arrayPath); err != nil {
+		logger.Error("error when formatting a new RAID array", zap.Error(err), zap.String("array", arrayPath))
+		return raidAnswer(ctx, fmt.Errorf("%s is made but could not be formatted: %w", arrayPath, err))
+	}
+	if !mountStorage(service.MyService.Disk().GetDiskInfo(arrayPath), request.Name) {
+		return raidAnswer(ctx, fmt.Errorf("%s is made and formatted but could not be mounted", arrayPath))
+	}
+	array, _ := service.RAIDArrayNamed("/sys", strings.TrimPrefix(arrayPath, "/dev/"))
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: array})
 }
 

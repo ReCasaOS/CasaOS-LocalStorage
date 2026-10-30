@@ -11,7 +11,7 @@ import (
 
 // Repairing a software RAID array: a blank disk added where one is missing or
 // failed, and a failed disk taken out. Both go through mdadm; nothing else is
-// changed (no array made, grown or stopped here).
+// changed (no array grown or stopped here; raid_create.go makes one).
 
 var (
 	ErrNoRAIDArray      = errors.New("no such RAID array")
@@ -78,14 +78,8 @@ func AddRAIDDisk(array RAIDArray, disk model.LSBLKModel) error {
 	if !hasMDADM() {
 		return ErrNoMDADM
 	}
-	// old signatures first: mdadm takes the disk whole
-	for _, part := range disk.Children {
-		if err := raidRun("wipefs", "--all", part.Path); err != nil {
-			return fmt.Errorf("wiping %s: %w", part.Path, err)
-		}
-	}
-	if err := raidRun("wipefs", "--all", disk.Path); err != nil {
-		return fmt.Errorf("wiping %s: %w", disk.Path, err)
+	if err := wipeRAIDDisk(disk); err != nil {
+		return err
 	}
 	if err := raidRun("mdadm", "--manage", array.Path, "--add", disk.Path); err != nil {
 		return fmt.Errorf("adding %s to %s: %w", disk.Path, array.Path, err)
@@ -109,6 +103,19 @@ func RemoveRAIDDisk(array RAIDArray, member string) error {
 	}
 	if err := raidRun("mdadm", "--manage", array.Path, "--remove", "/dev/"+member); err != nil {
 		return fmt.Errorf("taking %s out of %s: %w", member, array.Path, err)
+	}
+	return nil
+}
+
+// wipeRAIDDisk erases the signatures of a disk and of its partitions, old ones first: mdadm takes the disk whole.
+func wipeRAIDDisk(disk model.LSBLKModel) error {
+	for _, part := range disk.Children {
+		if err := raidRun("wipefs", "--all", part.Path); err != nil {
+			return fmt.Errorf("wiping %s: %w", part.Path, err)
+		}
+	}
+	if err := raidRun("wipefs", "--all", disk.Path); err != nil {
+		return fmt.Errorf("wiping %s: %w", disk.Path, err)
 	}
 	return nil
 }

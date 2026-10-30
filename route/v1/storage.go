@@ -192,61 +192,62 @@ func PostAddStorage(ctx echo.Context) error {
 	}
 	message := ""
 	for _, blkChild := range currentDisk.Children {
-
-		mountPoint := blkChild.GetMountPoint(name)
-		// mount disk
-		if output, err := service.MyService.Disk().MountDisk(blkChild.Path, mountPoint); err != nil {
-			logger.Error("err", zap.Error(err), zap.String("mountPoint", mountPoint), zap.String("output", output))
+		if !mountStorage(blkChild, name) {
 			message += blkChild.Path + "\n"
-			continue
-			// return ctx.JSON(http.StatusInternalServerError, model.Result{Success: common_err.SERVICE_ERROR, Message: output, Data: err.Error()})
-			// return
 		}
-
-		var b model1.LSBLKModel
-		retry := 3 // ugly workaround for lsblk not returning UUID after creating partition on time - need a better solution
-		for b.UUID == "" && retry > 0 {
-			time.Sleep(1 * time.Second)
-			b = service.MyService.Disk().GetDiskInfo(blkChild.Path)
-			retry--
-		}
-
-		m := model2.Volume{
-			MountPoint: b.MountPoint,
-			UUID:       b.UUID,
-			CreatedAt:  time.Now().Unix(),
-		}
-
-		if err := service.MyService.Disk().SaveMountPointToDB(m); err != nil {
-			blkChild.MountPoint = mountPoint
-			service.MyService.Disk().UmountPointAndRemoveDir(blkChild)
-			message += blkChild.Path + "\n"
-			continue
-			// return ctx.JSON(http.StatusInternalServerError, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
-			// return
-		}
-
-		// send notify to client
-		go func(blkChild model1.LSBLKModel) {
-			message := map[string]interface{}{
-				"data": StorageMessage{
-					Action: "ADDED",
-					Path:   blkChild.Path,
-					Volume: "/media/",
-					Size:   blkChild.Size,
-					Type:   blkChild.Tran,
-				},
-			}
-
-			if err := service.MyService.Notify().SendNotify(messagePathStorageStatus, message); err != nil {
-				logger.Error("error when sending notification", zap.Error(err), zap.String("message path", messagePathStorageStatus), zap.Any("message", message))
-			}
-		}(blkChild)
 	}
 	if len(message) > 0 {
 		return ctx.JSON(http.StatusOK, model.Result{Success: common_err.SERVICE_ERROR, Message: message})
 	}
 	return ctx.JSON(http.StatusOK, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS)})
+}
+
+// mountStorage mounts the filesystem of blkChild under /media, records it by its UUID and tells the dashboard; false when it could not be mounted or recorded.
+func mountStorage(blkChild model1.LSBLKModel, name string) bool {
+	mountPoint := blkChild.GetMountPoint(name)
+	// mount disk
+	if output, err := service.MyService.Disk().MountDisk(blkChild.Path, mountPoint); err != nil {
+		logger.Error("err", zap.Error(err), zap.String("mountPoint", mountPoint), zap.String("output", output))
+		return false
+	}
+
+	var b model1.LSBLKModel
+	retry := 3 // ugly workaround for lsblk not returning UUID after creating partition on time - need a better solution
+	for b.UUID == "" && retry > 0 {
+		time.Sleep(1 * time.Second)
+		b = service.MyService.Disk().GetDiskInfo(blkChild.Path)
+		retry--
+	}
+
+	m := model2.Volume{
+		MountPoint: b.MountPoint,
+		UUID:       b.UUID,
+		CreatedAt:  time.Now().Unix(),
+	}
+
+	if err := service.MyService.Disk().SaveMountPointToDB(m); err != nil {
+		blkChild.MountPoint = mountPoint
+		service.MyService.Disk().UmountPointAndRemoveDir(blkChild)
+		return false
+	}
+
+	// send notify to client
+	go func(blkChild model1.LSBLKModel) {
+		message := map[string]interface{}{
+			"data": StorageMessage{
+				Action: "ADDED",
+				Path:   blkChild.Path,
+				Volume: "/media/",
+				Size:   blkChild.Size,
+				Type:   blkChild.Tran,
+			},
+		}
+
+		if err := service.MyService.Notify().SendNotify(messagePathStorageStatus, message); err != nil {
+			logger.Error("error when sending notification", zap.Error(err), zap.String("message path", messagePathStorageStatus), zap.Any("message", message))
+		}
+	}(blkChild)
+	return true
 }
 
 // @Param  pwd formData string true "user password"
