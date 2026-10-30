@@ -534,6 +534,9 @@ func (d *diskService) CheckSerialDiskMount() {
 	}
 
 	list := d.LSBLK(true)
+	if raidMemberWithoutArray(list) {
+		list = d.awaitRAIDArrays(list)
+	}
 	mountPointMap := make(map[string]string, len(dbList))
 
 	defer d.RemoveLSBLKCache()
