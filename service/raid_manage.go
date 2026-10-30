@@ -3,7 +3,9 @@ package service
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/ReCasaOS/CasaOS-LocalStorage/model"
 	"github.com/ReCasaOS/CasaOS-LocalStorage/pkg/utils/command"
@@ -41,13 +43,33 @@ func ensureMDADM() error {
 	if hasMDADM() {
 		return nil
 	}
-	// noninteractive: mdadm's package asks where to mail alerts, and nobody is there to answer
-	err := raidRun("env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "-o", "DPkg::Lock::Timeout=120", "install", "-y", "-q", "--no-install-recommends", "mdadm")
-	if err != nil {
+	if err := raidInstall("mdadm"); err != nil {
 		return fmt.Errorf("%w: %v", ErrNoMDADM, err)
 	}
 	if !hasMDADM() {
 		return ErrNoMDADM
+	}
+	return nil
+}
+
+// aptInstallCommand is apt-get install of pkg without a question: mdadm's package asks where to mail alerts, and nobody is there to answer, so debconf is told
+// noninteractive through the environment. It does not go through raidRun: command.ExecuteCommand refuses an argument that reads as a shell assignment, and
+// DEBIAN_FRONTEND=noninteractive does ("Shell Injection Detected"), which is what the first version of this did.
+func aptInstallCommand(pkg string) *exec.Cmd {
+	cmd := exec.Command("apt-get", "-o", "DPkg::Lock::Timeout=120", "install", "-y", "-q", "--no-install-recommends", pkg)
+	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+	return cmd
+}
+
+// raidInstall installs a package for the repair and the creation, a var for the tests. The end of apt's own words goes into the error.
+var raidInstall = func(pkg string) error {
+	out, err := aptInstallCommand(pkg).CombinedOutput()
+	if err != nil {
+		tail := strings.TrimSpace(string(out))
+		if len(tail) > 300 {
+			tail = tail[len(tail)-300:]
+		}
+		return fmt.Errorf("%w: %s", err, tail)
 	}
 	return nil
 }
