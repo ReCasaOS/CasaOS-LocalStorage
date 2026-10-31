@@ -14,7 +14,8 @@ import (
 func recordRuns(t *testing.T, mdadm bool, fail string) *[]string {
 	t.Helper()
 	var ran []string
-	savedRun, savedHas, savedInstall := raidRun, hasMDADM, raidInstall
+	savedRun, savedHas, savedInstall, savedWait := raidRun, hasMDADM, raidInstall, raidRetryWait
+	raidRetryWait = 0
 	raidRun = func(name string, args ...string) error {
 		line := strings.Join(append([]string{name}, args...), " ")
 		ran = append(ran, line)
@@ -26,7 +27,7 @@ func recordRuns(t *testing.T, mdadm bool, fail string) *[]string {
 	hasMDADM = func() bool { return mdadm }
 	// the installation is recorded like any command, as "apt-get install <package>"
 	raidInstall = func(pkg string) error { return raidRun("apt-get", "install", pkg) }
-	t.Cleanup(func() { raidRun, hasMDADM, raidInstall = savedRun, savedHas, savedInstall })
+	t.Cleanup(func() { raidRun, hasMDADM, raidInstall, raidRetryWait = savedRun, savedHas, savedInstall, savedWait })
 	return &ran
 }
 

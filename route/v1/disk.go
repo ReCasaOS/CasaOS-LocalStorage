@@ -233,7 +233,7 @@ func raidAnswer(ctx echo.Context, err error) error {
 		status = http.StatusNotFound
 	case errors.Is(err, service.ErrRAIDDiskNotFree), errors.Is(err, service.ErrRAIDDiskTooSmall), errors.Is(err, service.ErrRAIDNotFaulty),
 		errors.Is(err, service.ErrRAIDLevel), errors.Is(err, service.ErrRAIDTooFewDisks), errors.Is(err, service.ErrRAIDSameDisk), errors.Is(err, service.ErrRAIDConsent),
-		errors.Is(err, service.ErrRAIDNotMirror), errors.Is(err, service.ErrRAIDFilesystem):
+		errors.Is(err, service.ErrRAIDNotMirror), errors.Is(err, service.ErrRAIDNotMember), errors.Is(err, service.ErrRAIDFilesystem):
 		status = http.StatusBadRequest
 	case errors.Is(err, service.ErrRAIDWhole), errors.Is(err, service.ErrRAIDNotRunning), errors.Is(err, service.ErrNoMDADM), errors.Is(err, service.ErrRAIDNotSettled):
 		status = http.StatusConflict
@@ -280,7 +280,8 @@ func raidBackupFile(array string) string {
 	return filepath.Join(config.AppInfo.DBPath, "raid-"+array+".backup")
 }
 
-// PostRAIDLevel changes the RAID 1 of two disks called :name to a RAID 5, with a third disk that is blank and erased. The body names the level and the disk twice,
+// PostRAIDLevel changes the RAID 1 called :name to a RAID 5, with a third disk that is blank and erased. A mirror of three has no third disk to give: the path is
+// then the disk of its last drive, which is taken out, erased and put back as the third (it is told which when another is named). The body names the level and the disk twice,
 // its path and its name typed again by the person ({"level": "raid5", "path": "/dev/sdd", "confirm": "sdd"}). It answers once the reshape has started; it goes on
 // in the background, and the array reads "reshaping" until it is over. RAID 5 is the only level offered.
 func PostRAIDLevel(ctx echo.Context) error {
@@ -306,13 +307,23 @@ func PostRAIDLevel(ctx echo.Context) error {
 	if err != nil {
 		return raidAnswer(ctx, err)
 	}
-	disk, err := service.RAIDCandidate(service.MyService.Disk().LSBLK(false), request.Path, array.ComponentSize)
-	if err != nil {
-		return raidAnswer(ctx, err)
+	var change error
+	if array.Level == "raid1" && array.Disks == 3 {
+		disk, member, err := service.RAIDFreeableDisk(service.MyService.Disk().LSBLK(false), array, request.Path)
+		if err != nil {
+			return raidAnswer(ctx, err)
+		}
+		change = service.RAIDTrioToRAID5(array, disk, member, raidBackupFile(array.Name))
+	} else {
+		disk, err := service.RAIDCandidate(service.MyService.Disk().LSBLK(false), request.Path, array.ComponentSize)
+		if err != nil {
+			return raidAnswer(ctx, err)
+		}
+		change = service.RAIDToRAID5(array, disk, raidBackupFile(array.Name))
 	}
-	if err := service.RAIDToRAID5(array, disk, raidBackupFile(array.Name)); err != nil {
-		logger.Error("error when changing a RAID array to RAID 5", zap.Error(err), zap.String("array", array.Path), zap.String("disk", disk.Path))
-		return raidAnswer(ctx, err)
+	if change != nil {
+		logger.Error("error when changing a RAID array to RAID 5", zap.Error(change), zap.String("array", array.Path), zap.String("disk", request.Path))
+		return raidAnswer(ctx, change)
 	}
 	array, _ = service.RAIDArrayNamed("/sys", array.Name)
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: array})
