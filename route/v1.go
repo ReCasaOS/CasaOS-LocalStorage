@@ -69,6 +69,8 @@ func InitV1Router() http.Handler {
 			v1DisksGroup.GET("/raid", v1.GetRAIDArrays)
 			v1DisksGroup.POST("/raid", v1.PostRAIDArray)
 			v1DisksGroup.POST("/raid/:name/disks", v1.PostRAIDDisk)
+			v1DisksGroup.POST("/raid/:name/level", v1.PostRAIDLevel)
+			v1DisksGroup.POST("/raid/:name/filesystem", v1.PostRAIDFilesystem)
 			v1DisksGroup.DELETE("/raid/:name/disks/:member", v1.DeleteRAIDDisk)
 		}
 
