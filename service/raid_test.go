@@ -97,14 +97,14 @@ func TestTheStateOfAnArrayIsReadFromSysfs(t *testing.T) {
 	}
 
 	if a := got["md0"]; a.State != "ok" || a.Path != "/dev/md0" || a.Level != "raid1" || a.Disks != 2 || a.Missing != 0 || a.Progress != -1 || a.Remaining != -1 || a.ComponentSize != 976630464*1024 ||
-		!reflect.DeepEqual(a.Members, []RAIDMember{{"sdb1", "sdb", "active"}, {"sdc1", "sdc", "active"}}) {
+		!reflect.DeepEqual(a.Members, []RAIDMember{{"sdb1", "sdb", "active", 0}, {"sdc1", "sdc", "active", 1}}) {
 		t.Errorf("a healthy mirror: %+v", a)
 	}
 	if a := got["md1"]; a.State != "degraded" || a.Missing != 1 || len(a.Members) != 1 {
 		t.Errorf("a mirror with one disk gone: %+v", a)
 	}
 	if a := got["md2"]; a.State != "rebuilding" || a.Action != "recover" || a.Progress < 33.3 || a.Progress > 33.4 || a.Remaining != 976 ||
-		a.Members[2] != (RAIDMember{"sdd", "sdd", "rebuilding"}) {
+		a.Members[2] != (RAIDMember{"sdd", "sdd", "rebuilding", 2}) {
 		t.Errorf("a RAID 5 rebuilding a whole disk: %+v", a)
 	}
 	if a := got["md3"]; a.State != "degraded" || a.Missing != 0 || a.Members[2].State != "faulty" || a.Members[3].State != "spare" {

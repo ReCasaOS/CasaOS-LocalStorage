@@ -44,6 +44,8 @@ type RAIDMember struct {
 	Disk string `json:"disk"` // sdb: the disk it is on
 	// State is active, rebuilding, spare or faulty.
 	State string `json:"state"`
+	// Slot is its place among the array's disks (0, 1, 2…), -1 for a spare.
+	Slot int `json:"slot"`
 }
 
 // RAIDArrays lists the md arrays under the sysfs at sys ("/sys"), by name.
@@ -143,7 +145,11 @@ func raidMembers(sys, mdDir string) []RAIDMember {
 		case !has("in_sync"):
 			state = "rebuilding"
 		}
-		members = append(members, RAIDMember{Name: name, Disk: diskOf(sys, name), State: state})
+		n := -1
+		if v, err := strconv.Atoi(slot); err == nil {
+			n = v
+		}
+		members = append(members, RAIDMember{Name: name, Disk: diskOf(sys, name), State: state, Slot: n})
 	}
 	return members
 }
