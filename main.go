@@ -179,6 +179,11 @@ func main() {
 		}
 	}
 
+	// the nightly SnapRAID sync (and the Sunday scrub) when one is set up; each hour asks whether it is time
+	if _, err := crontab.AddFunc("0 0 * * * *", func() { service.RunSnapRAIDSchedule(time.Now()) }); err != nil {
+		logger.Error("crontab add func error", zap.Error(err))
+	}
+
 	crontab.Start()
 	defer crontab.Stop()
 
@@ -245,6 +250,7 @@ func RegMsg() {
 	var events []message_bus.EventType
 	events = append(events, message_bus.EventType{Name: common.ServiceName + ":merge_status", SourceID: common.ServiceName, PropertyTypeList: []message_bus.PropertyType{}})
 	events = append(events, message_bus.EventType{Name: common.ServiceName + ":storage_status", SourceID: common.ServiceName, PropertyTypeList: []message_bus.PropertyType{}})
+	events = append(events, message_bus.EventType{Name: common.ServiceName + ":snapraid", SourceID: common.ServiceName, PropertyTypeList: []message_bus.PropertyType{}})
 	// register at message bus
 	for i := 0; i < 10; i++ {
 		response, err := service.MyService.MessageBus().RegisterEventTypesWithResponse(context.Background(), events)
