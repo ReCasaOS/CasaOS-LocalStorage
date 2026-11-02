@@ -72,6 +72,11 @@ func InitV1Router() http.Handler {
 			v1DisksGroup.POST("/raid/:name/level", v1.PostRAIDLevel)
 			v1DisksGroup.POST("/raid/:name/filesystem", v1.PostRAIDFilesystem)
 			v1DisksGroup.DELETE("/raid/:name/disks/:member", v1.DeleteRAIDDisk)
+			v1DisksGroup.GET("/snapraid", v1.GetSnapRAID)
+			v1DisksGroup.PUT("/snapraid", v1.PutSnapRAID)
+			v1DisksGroup.DELETE("/snapraid", v1.DeleteSnapRAID)
+			v1DisksGroup.DELETE("/snapraid/job", v1.DeleteSnapRAIDJob)
+			v1DisksGroup.POST("/snapraid/:action", v1.PostSnapRAIDAction)
 		}
 
 		v1StorageGroup := v1Group.Group("/storage")
