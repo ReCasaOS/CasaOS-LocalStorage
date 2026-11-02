@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ReCasaOS/CasaOS-Common/model"
 	"github.com/ReCasaOS/CasaOS-Common/utils/common_err"
@@ -15,6 +16,7 @@ import (
 	model1 "github.com/ReCasaOS/CasaOS-LocalStorage/model"
 	"github.com/ReCasaOS/CasaOS-LocalStorage/pkg/config"
 	"github.com/ReCasaOS/CasaOS-LocalStorage/service"
+	model2 "github.com/ReCasaOS/CasaOS-LocalStorage/service/model"
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v3/disk"
 	"go.uber.org/zap"
@@ -235,7 +237,8 @@ func raidAnswer(ctx echo.Context, err error) error {
 		errors.Is(err, service.ErrRAIDLevel), errors.Is(err, service.ErrRAIDTooFewDisks), errors.Is(err, service.ErrRAIDSameDisk), errors.Is(err, service.ErrRAIDConsent),
 		errors.Is(err, service.ErrRAIDNotMirror), errors.Is(err, service.ErrRAIDNotMember), errors.Is(err, service.ErrRAIDFilesystem):
 		status = http.StatusBadRequest
-	case errors.Is(err, service.ErrRAIDWhole), errors.Is(err, service.ErrRAIDNotRunning), errors.Is(err, service.ErrNoMDADM), errors.Is(err, service.ErrRAIDNotSettled):
+	case errors.Is(err, service.ErrRAIDWhole), errors.Is(err, service.ErrRAIDNotRunning), errors.Is(err, service.ErrNoMDADM), errors.Is(err, service.ErrRAIDNotSettled),
+		errors.Is(err, service.ErrRAIDSystem), errors.Is(err, service.ErrRAIDPooled), errors.Is(err, service.ErrRAIDLayered), errors.Is(err, service.ErrRAIDInUse):
 		status = http.StatusConflict
 	}
 	return ctx.JSON(status, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error(), Data: err.Error()})
@@ -425,6 +428,96 @@ func DeleteRAIDDisk(ctx echo.Context) error {
 	defer service.MyService.Disk().RemoveLSBLKCache()
 	array, _ = service.RAIDArrayNamed("/sys", array.Name)
 	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: array})
+}
+
+// raidTakenMounts are the mount points and volume UUIDs a RAID array may not give up: the disks of the merged storage, and those SnapRAID protects or keeps its parity on,
+// a var for the tests.
+var raidTakenMounts = func() []string {
+	var taken []string
+	if merges, err := service.MyService.LocalStorage().GetMerges(nil); err == nil {
+		for _, m := range merges {
+			for _, v := range m.SourceVolumes {
+				if v != nil {
+					taken = append(taken, v.MountPoint, v.UUID)
+				}
+			}
+		}
+	}
+	if state := service.SnapRAIDStatus(); state.Config != nil {
+		for _, d := range state.Config.Data {
+			taken = append(taken, d.Path)
+		}
+		taken = append(taken, state.Config.Parity...)
+	}
+	return taken
+}
+
+// DeleteRAIDArray deletes the array :name and everything on it: its filesystem is unmounted and forgotten, the array is stopped and each disk loses its RAID header, so that
+// the disks read blank. The body repeats the array's name ({"confirm": "md0"}). It answers 409 while the system, the merged storage or SnapRAID is on the array, or when
+// the array cannot be stopped: it is then mounted again, as it was.
+func DeleteRAIDArray(ctx echo.Context) error {
+	name := ctx.Param("name")
+	var request struct {
+		Confirm string `json:"confirm"`
+	}
+	if err := ctx.Bind(&request); err != nil || request.Confirm != name {
+		return ctx.JSON(http.StatusBadRequest, model.Result{Success: common_err.INVALID_PARAMS, Message: "the array's name was not typed again", Data: "the array's name was not typed again"})
+	}
+	array, err := service.RAIDArrayNamed("/sys", name)
+	if err != nil {
+		return raidAnswer(ctx, err)
+	}
+	if _, ok := diskMap[array.Path]; ok {
+		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.DISK_BUSYING, Message: common_err.GetMsg(common_err.DISK_BUSYING)})
+	}
+	diskMap[array.Path] = "busying"
+	defer delete(diskMap, array.Path)
+	defer service.MyService.Disk().RemoveLSBLKCache()
+
+	blk := service.MyService.Disk().GetDiskInfo(array.Path)
+	if err := service.RAIDDeletable(blk, raidTakenMounts()); err != nil {
+		return raidAnswer(ctx, err)
+	}
+
+	volumes := service.RAIDVolumes(blk)
+	if err := service.MyService.Disk().UmountPointAndRemoveDir(blk); err != nil {
+		logger.Error("error when unmounting a RAID array to delete it", zap.Error(err), zap.String("array", array.Path))
+		return raidAnswer(ctx, fmt.Errorf("%w: %v", service.ErrRAIDInUse, err))
+	}
+	// the volume is looked up by the array, which is gone once it is stopped
+	for _, v := range volumes {
+		if err := service.MyService.Disk().DeleteMountPointFromDB(v.Path, v.MountPoint); err != nil {
+			logger.Error("error when deleting mount point from database", zap.Error(err), zap.String("path", v.Path), zap.String("mount point", v.MountPoint))
+		}
+	}
+	if err := service.DeleteRAIDArray(array); err != nil {
+		logger.Error("error when deleting a RAID array", zap.Error(err), zap.String("array", array.Path))
+		if errors.Is(err, service.ErrRAIDInUse) {
+			for _, v := range volumes {
+				if _, merr := service.MyService.Disk().MountDisk(v.Path, v.MountPoint); merr != nil {
+					logger.Error("error when mounting a RAID array again", zap.Error(merr), zap.String("path", v.Path), zap.String("mount point", v.MountPoint))
+					continue
+				}
+				if serr := service.MyService.Disk().SaveMountPointToDB(model2.Volume{MountPoint: v.MountPoint, UUID: v.UUID, CreatedAt: time.Now().Unix()}); serr != nil {
+					logger.Error("error when saving a RAID array's mount point again", zap.Error(serr), zap.String("mount point", v.MountPoint))
+				}
+			}
+		}
+		return raidAnswer(ctx, err)
+	}
+	for _, v := range volumes {
+		if err := service.MyService.Shares().DeleteShare(v.MountPoint); err != nil {
+			logger.Error("error when deleting share by mount point", zap.Error(err), zap.String("mount point", v.MountPoint))
+		}
+	}
+
+	go func() {
+		message := map[string]interface{}{"data": StorageMessage{Action: "REMOVED", Path: array.Path}}
+		if err := service.MyService.Notify().SendNotify(messagePathStorageStatus, message); err != nil {
+			logger.Error("error when sending notification", zap.Error(err), zap.String("message path", messagePathStorageStatus), zap.Any("message", message))
+		}
+	}()
+	return ctx.JSON(common_err.SUCCESS, model.Result{Success: common_err.SUCCESS, Message: common_err.GetMsg(common_err.SUCCESS), Data: array.Path})
 }
 
 func GetDiskSize(ctx echo.Context) error {
