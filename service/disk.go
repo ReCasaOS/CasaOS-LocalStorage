@@ -76,18 +76,13 @@ var (
 )
 
 func (d *diskService) EnsureDefaultMergePoint() bool {
-	mountPoint := common.DefaultMountPoint
-
-	existingMerges, err := MyService.LocalStorage().GetMergeAllFromDB(&mountPoint)
+	// a merge anywhere keeps mergerfs enabled: one that is not on /DATA has to be mounted again at the next boot as much as the one that is
+	existingMerges, err := MyService.LocalStorage().GetMergeAllFromDB(nil)
 	if err != nil {
 		panic(err)
 	}
 
-	// check if /DATA is already a merge point
 	if len(existingMerges) > 0 {
-		if len(existingMerges) > 1 {
-			logger.Error("more than one merge point with the same mount point found", zap.String("mount point", mountPoint))
-		}
 		config.ServerInfo.EnableMergerFS = "true"
 		return true
 	}
