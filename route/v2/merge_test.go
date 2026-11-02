@@ -65,3 +65,14 @@ func TestIsFullMergeRemovalRequiresExplicitEmptySelection(t *testing.T) {
 		t.Fatal("expected an omitted source selection not to request a full unmerge")
 	}
 }
+
+func TestIsFullMergeRemovalAppliesToAnyMountPoint(t *testing.T) {
+	emptySources := []string{}
+	if !isFullMergeRemoval(codegen.Merge{MountPoint: "/media/Pool", SourceVolumeUuids: &emptySources}) {
+		t.Fatal("expected an explicit empty selection to unmerge a merge that is not on /DATA")
+	}
+
+	if isFullMergeRemoval(codegen.Merge{SourceVolumeUuids: &emptySources}) {
+		t.Fatal("expected a request without a mount point not to be a full unmerge")
+	}
+}
