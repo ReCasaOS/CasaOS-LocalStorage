@@ -46,7 +46,7 @@ func (s *LocalStorage) SetMerge(ctx echo.Context) error {
 	}
 
 	// An explicitly empty source list is the full-unmerge operation for the
-	// default data root. This is deliberately different from an omitted source
+	// merge at that mount point. This is deliberately different from an omitted source
 	// list, which leaves the current source selection unchanged.
 	if isFullMergeRemoval(m) {
 		if err := service.MyService.LocalStorage().RemoveMerge(m.MountPoint); err != nil {
@@ -55,13 +55,21 @@ func (s *LocalStorage) SetMerge(ctx echo.Context) error {
 			return ctx.JSON(http.StatusInternalServerError, codegen.BaseResponse{Message: &message})
 		}
 
-		config.ServerInfo.EnableMergerFS = "false"
-		if config.Cfg != nil {
-			config.Cfg.Section("server").Key("EnableMergerFS").SetValue("false")
-			if err := config.Cfg.SaveTo(config.LocalStorageConfigFilePath); err != nil {
-				message := err.Error()
-				logger.Error("failed to persist mergerfs disabled state", zap.Error(err))
-				return ctx.JSON(http.StatusInternalServerError, codegen.BaseResponse{Message: &message})
+		// mergerfs stays enabled while another merge is left
+		remaining, err := service.MyService.LocalStorage().GetMergeAllFromDB(nil)
+		if err != nil {
+			message := err.Error()
+			return ctx.JSON(http.StatusInternalServerError, codegen.BaseResponse{Message: &message})
+		}
+		if len(remaining) == 0 {
+			config.ServerInfo.EnableMergerFS = "false"
+			if config.Cfg != nil {
+				config.Cfg.Section("server").Key("EnableMergerFS").SetValue("false")
+				if err := config.Cfg.SaveTo(config.LocalStorageConfigFilePath); err != nil {
+					message := err.Error()
+					logger.Error("failed to persist mergerfs disabled state", zap.Error(err))
+					return ctx.JSON(http.StatusInternalServerError, codegen.BaseResponse{Message: &message})
+				}
 			}
 		}
 
@@ -196,7 +204,7 @@ func applyMergeSources(merge *model2.Merge, sourceBasePath *string, sourceVolume
 }
 
 func isFullMergeRemoval(merge codegen.Merge) bool {
-	if merge.MountPoint != common.DefaultMountPoint || merge.SourceVolumeUuids == nil || len(*merge.SourceVolumeUuids) != 0 {
+	if merge.MountPoint == "" || merge.SourceVolumeUuids == nil || len(*merge.SourceVolumeUuids) != 0 {
 		return false
 	}
 	return merge.SourceBasePath == nil || strings.TrimSpace(*merge.SourceBasePath) == ""
