@@ -121,6 +121,11 @@ func FormatPartition(partitionDevice string) error {
 		return err
 	}
 
+	// udev reads the new filesystem after mkfs is done: until it has, lsblk shows no UUID, and the volume cannot be recorded.
+	// Best effort: a box without udevadm only loses this wait, and the caller still retries.
+	_, _ = command.ExecuteCommand("udevadm", "trigger", "--action=change", partitionDevice)
+	_, _ = command.ExecuteCommand("udevadm", "settle", "--timeout=10")
+
 	return nil
 }
 
