@@ -40,10 +40,11 @@ var (
 
 	snapraidProgress = regexp.MustCompile(`^\s*(\d{1,3})%`)
 	snapraidCount    = regexp.MustCompile(`^\s*(\d+) (equal|added|removed|updated|moved|copied|restored)$`)
-	// snapraid scrub exits with 1 when nothing was synced yet, and says the array is empty: there is nothing to read back, which is no problem.
-	snapraidEmpty    = regexp.MustCompile(`(?mi)^the array (appears to be|is) empty`)
 	snapraidNoise    = regexp.MustCompile(`^(Saving state|Verif|Self test|Loading state|Using |Initializing|Resizing|Selecting|Scanning|Scanned|Comparing|Searching|WARNING! (Physical offsets|UUID is unsupported))|\|`)
 )
+
+// snapraid scrub exits with 1 when nothing was synced yet, and says the array is empty: there is nothing to read back, which is no problem.
+var snapraidEmpty = regexp.MustCompile(`(?mi)^the array (appears to be|is) empty`)
 
 // snapraidExec runs snapraid with args and gives each line it prints (a progress line ends with \r, not \n) to line. It answers the exit code. A var for the tests.
 // Stopping the context sends an interrupt: snapraid saves where it was and ends by itself, which a kill would not let it.

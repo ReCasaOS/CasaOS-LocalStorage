@@ -501,3 +501,16 @@ func TestTheRealSnapRAIDProtectsAndRestores(t *testing.T) {
 		t.Fatalf("scrub: %+v %v", result, err)
 	}
 }
+
+func TestTheStoragesSnapRAIDHoldsAreKnown(t *testing.T) {
+	newSnapRAIDBox(t)
+	if SnapRAIDUses("/mnt/d1") {
+		t.Fatal("nothing is set up yet")
+	}
+	setUpSnapRAID(t)
+	for mount, want := range map[string]bool{"/mnt/d1": true, "/mnt/d2/": true, "/mnt/p1": true, "/mnt/p2": false, "/mnt/other": false, "": false} {
+		if got := SnapRAIDUses(mount); got != want {
+			t.Errorf("%q: %v", mount, got)
+		}
+	}
+}
