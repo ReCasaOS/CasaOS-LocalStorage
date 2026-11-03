@@ -241,6 +241,22 @@ func TestAFailureIsToldInSnapRAIDsWordsWithoutTheNoise(t *testing.T) {
 	}
 }
 
+func TestAScrubOfAnEmptyArrayIsNoProblem(t *testing.T) {
+	for _, said := range []string{"The array appears to be empty.", "The array is empty."} {
+		box := newSnapRAIDBox(t)
+		setUpSnapRAID(t)
+		box.outputs["scrub"] = "Self test...\nLoading state from /x...\n" + said
+		box.codes["scrub"] = 1
+		result, _ := runSnapRAIDNow("scrub", SnapRAIDOptions{})
+		if !result.OK || result.Message != "" {
+			t.Fatalf("%q: %+v", said, result)
+		}
+		if strings.Join(box.told, ",") != "scrub:ok" {
+			t.Fatalf("%q: told %v", said, box.told)
+		}
+	}
+}
+
 func TestAFullScrubReadsAllOfIt(t *testing.T) {
 	box := newSnapRAIDBox(t)
 	setUpSnapRAID(t)
