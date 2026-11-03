@@ -241,6 +241,22 @@ func TestAFailureIsToldInSnapRAIDsWordsWithoutTheNoise(t *testing.T) {
 	}
 }
 
+func TestAScrubOfAnEmptyArrayIsNoProblem(t *testing.T) {
+	for _, said := range []string{"The array appears to be empty.", "The array is empty."} {
+		box := newSnapRAIDBox(t)
+		setUpSnapRAID(t)
+		box.outputs["scrub"] = "Self test...\nLoading state from /x...\n" + said
+		box.codes["scrub"] = 1
+		result, _ := runSnapRAIDNow("scrub", SnapRAIDOptions{})
+		if !result.OK || result.Message != "" {
+			t.Fatalf("%q: %+v", said, result)
+		}
+		if strings.Join(box.told, ",") != "scrub:ok" {
+			t.Fatalf("%q: told %v", said, box.told)
+		}
+	}
+}
+
 func TestAFullScrubReadsAllOfIt(t *testing.T) {
 	box := newSnapRAIDBox(t)
 	setUpSnapRAID(t)
@@ -483,5 +499,18 @@ func TestTheRealSnapRAIDProtectsAndRestores(t *testing.T) {
 	}
 	if result, err = runSnapRAIDNow("scrub", SnapRAIDOptions{Full: true}); err != nil || !result.OK {
 		t.Fatalf("scrub: %+v %v", result, err)
+	}
+}
+
+func TestTheStoragesSnapRAIDHoldsAreKnown(t *testing.T) {
+	newSnapRAIDBox(t)
+	if SnapRAIDUses("/mnt/d1") {
+		t.Fatal("nothing is set up yet")
+	}
+	setUpSnapRAID(t)
+	for mount, want := range map[string]bool{"/mnt/d1": true, "/mnt/d2/": true, "/mnt/p1": true, "/mnt/p2": false, "/mnt/other": false, "": false} {
+		if got := SnapRAIDUses(mount); got != want {
+			t.Errorf("%q: %v", mount, got)
+		}
 	}
 }
