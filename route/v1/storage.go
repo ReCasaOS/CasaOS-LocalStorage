@@ -272,6 +272,9 @@ func PutFormatStorage(ctx echo.Context) error {
 	if len(path) == 0 {
 		return ctx.JSON(http.StatusBadRequest, model.Result{Success: common_err.INVALID_PARAMS, Message: common_err.GetMsg(common_err.INVALID_PARAMS)})
 	}
+	if service.SnapRAIDUses(mountPoint) {
+		return ctx.JSON(http.StatusConflict, model.Result{Success: common_err.SERVICE_ERROR, Message: service.ErrStorageInSnapRAID.Error()})
+	}
 
 	if _, ok := diskMap[path]; ok {
 		return ctx.JSON(http.StatusInternalServerError, model.Result{Success: common_err.DISK_BUSYING, Message: common_err.GetMsg(common_err.DISK_BUSYING)})
@@ -282,6 +285,9 @@ func PutFormatStorage(ctx echo.Context) error {
 	defer service.MyService.Disk().RemoveLSBLKCache()
 	defer delete(diskMap, path)
 	diskInfo := service.MyService.Disk().GetDiskInfo(path)
+	if service.SnapRAIDUses(diskInfo.MountPoint) {
+		return ctx.JSON(http.StatusConflict, model.Result{Success: common_err.SERVICE_ERROR, Message: service.ErrStorageInSnapRAID.Error()})
+	}
 	if err := service.MyService.Disk().UmountPointAndRemoveDir(diskInfo); err != nil {
 		return ctx.JSON(http.StatusInternalServerError, model.Result{Success: common_err.REMOVE_MOUNT_POINT_ERROR, Message: err.Error()})
 	}
@@ -372,11 +378,17 @@ func DeleteStorage(ctx echo.Context) error {
 	if len(path) == 0 || len(mountPoint) == 0 {
 		return ctx.JSON(common_err.CLIENT_ERROR, model.Result{Success: common_err.INVALID_PARAMS, Message: common_err.GetMsg(common_err.INVALID_PARAMS)})
 	}
+	if service.SnapRAIDUses(mountPoint) {
+		return ctx.JSON(http.StatusConflict, model.Result{Success: common_err.SERVICE_ERROR, Message: service.ErrStorageInSnapRAID.Error()})
+	}
 
 	if _, ok := diskMap[path]; ok {
 		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.DISK_BUSYING, Message: common_err.GetMsg(common_err.DISK_BUSYING)})
 	}
 	diskInfo := service.MyService.Disk().GetDiskInfo(path)
+	if service.SnapRAIDUses(diskInfo.MountPoint) {
+		return ctx.JSON(http.StatusConflict, model.Result{Success: common_err.SERVICE_ERROR, Message: service.ErrStorageInSnapRAID.Error()})
+	}
 	if err := service.MyService.Disk().UmountPointAndRemoveDir(diskInfo); err != nil {
 		return ctx.JSON(http.StatusInternalServerError, model.Result{Success: common_err.REMOVE_MOUNT_POINT_ERROR, Message: err.Error()})
 	}

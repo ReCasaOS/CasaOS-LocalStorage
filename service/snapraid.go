@@ -33,6 +33,8 @@ var (
 	ErrSnapRAIDAction     = errors.New("no such action: diff, sync, scrub or fix")
 	ErrSnapRAIDConsent    = errors.New("fix puts files back as they were at the last sync: say which disk it is, typed again in confirm (or all)")
 	ErrSnapRAIDNoDisk     = errors.New("no such data disk")
+	// ErrStorageInSnapRAID is the answer to formatting or removing a storage SnapRAID holds.
+	ErrStorageInSnapRAID = errors.New("this storage is part of SnapRAID: remove the protection first")
 )
 
 // SnapRAIDDisk is a data disk: the name SnapRAID knows it by (d1, d2: it never changes once given, a new disk takes the next free one) and where it is mounted.
@@ -285,6 +287,32 @@ func SetSnapRAID(data, parity []string, maxRemoved, hour *int) (SnapRAIDConfig, 
 		return SnapRAIDConfig{}, err
 	}
 	return cfg, saveSnapRAID(f)
+}
+
+// SnapRAIDUses says whether the storage mounted at mountPoint is a data disk of SnapRAID or keeps its parity: formatting or removing it would take the files, or the
+// parity, away from under the protection.
+func SnapRAIDUses(mountPoint string) bool {
+	if mountPoint == "" {
+		return false
+	}
+	snapraidMu.Lock()
+	defer snapraidMu.Unlock()
+	f, ok := loadSnapRAID()
+	if !ok {
+		return false
+	}
+	where := filepath.Clean(mountPoint)
+	for _, d := range f.Config.Data {
+		if filepath.Clean(d.Path) == where {
+			return true
+		}
+	}
+	for _, p := range f.Config.Parity {
+		if filepath.Clean(p) == where {
+			return true
+		}
+	}
+	return false
 }
 
 // ClearSnapRAID forgets the setup. The parity files stay where they are, on the parity disks: they cost room, and they are what a later setup of the same

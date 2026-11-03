@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -111,5 +112,29 @@ func TestAPoolStandsForItsDisks(t *testing.T) {
 	snapraidPoolDisks = func(string) ([]string, error) { return []string{"/media/a", "/media/b"}, nil }
 	if code, _ := snapraidCall(t, PutSnapRAID, http.MethodPut, `{"pool": "/media/pool", "parity": ["/1", "/2", "/3"]}`, ""); code != http.StatusBadRequest {
 		t.Errorf("a pool and too many parity disks: %d", code)
+	}
+}
+
+func TestAStorageSnapRAIDHoldsCannotBeFormattedOrRemoved(t *testing.T) {
+	logger.LogInitConsoleOnly()
+	saved := config.AppInfo.DBPath
+	config.AppInfo.DBPath = t.TempDir()
+	t.Cleanup(func() { config.AppInfo.DBPath = saved })
+	state := `{"config":{"data":[{"name":"d1","path":"/mnt/d1"}],"parity":["/mnt/p1"]}}`
+	if err := os.WriteFile(filepath.Join(config.AppInfo.DBPath, "snapraid.json"), []byte(state), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, handler := range map[string]echo.HandlerFunc{"format": PutFormatStorage, "remove": DeleteStorage} {
+		for _, volume := range []string{"/mnt/p1", "/mnt/d1/"} {
+			request := httptest.NewRequest(http.MethodPut, "/v1/storage", strings.NewReader(`{"path":"/dev/sdz1","volume":"`+volume+`"}`))
+			request.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			if err := handler(echo.New().NewContext(request, rec)); err != nil {
+				t.Fatal(err)
+			}
+			if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "remove the protection first") {
+				t.Errorf("%s %s: %d %s", name, volume, rec.Code, rec.Body.String())
+			}
+		}
 	}
 }
