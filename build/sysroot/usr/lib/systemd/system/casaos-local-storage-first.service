@@ -9,3 +9,4 @@ ExecStart=/usr/bin/casaos-local-storage -init
 
 [Install]
 WantedBy=multi-user.target
+Alias=recasaos-local-storage-first.service
