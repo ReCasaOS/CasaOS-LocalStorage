@@ -6,6 +6,7 @@ All notable changes to CasaOS LocalStorage are documented here.
 
 ### Added
 
+- **ZFS pools, datasets and snapshots, read only** (`GET /v1/disks/zfs`, `/v1/disks/zfs/snapshots?dataset=`, `/v1/disks/zfs/io`). Pools (size, allocated, free, fragmentation, health), the state of each (`zpool status`: scan, errors, tree of disks), datasets, the snapshots of one dataset (newest 200), and the I/O counters of each pool read from the kernel. Only `zpool list`, `zpool status`, `zfs list` run, without a shell, in their scripted forms (`-H -p`), with time-outs, one at a time: a pool that stopped answering cannot pile processes up. A box without ZFS answers `available: false`. Nothing here changes a pool.
 - **`CASAOS_LSBLK_FILE`** (development): when set, `ExecLSBLK` returns that file instead of running host `lsblk`. `ExecLSBLKByPath` filters the same document.
 - **`CASAOS_FAKE_STORAGE=1`** (development): `mount`, `umount`, `parted`, `partprobe`, `e2label` and `sfdisk` return success without exec, only when `CASAOS_LSBLK_FILE` is set too. `mdadm`, `mkfs` and `wipefs` still exec. Production is unchanged when the variables are unset.
 
