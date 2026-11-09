@@ -487,6 +487,29 @@ func TestZFSStuckCommandIsNotPiledUpOn(t *testing.T) {
 	}
 }
 
+// What a real box (OpenZFS 2.4.1, Ubuntu 26.04) printed.
+func TestRealOutputOfOpenZFS24(t *testing.T) {
+	pools := parseZpoolList(zfsFixture(t, "real_zpool_list.txt"))
+	if len(pools) != 1 || pools[0].Size != 1992864825344 || pools[0].Allocated != 1324916645888 || pools[0].Free != 667948179456 || pools[0].Fragmentation != 64 || pools[0].Capacity != 66 || pools[0].Health != "ONLINE" {
+		t.Fatalf("%+v", pools)
+	}
+	datasets := parseZfsList(zfsFixture(t, "real_zfs_list.txt"))
+	if len(datasets) != 4 || datasets[1].Name != "pool1/appdata" || datasets[1].Mountpoint != "/pool1/data1" || datasets[1].UsedBySnapshots != 886489088 || datasets[0].Referenced != 106496 {
+		t.Fatalf("a mount point is not the name of the dataset: %+v", datasets)
+	}
+	p := parseStatus(t, "real_zpool_status_features.txt")
+	// the pool is healthy and says something: features not enabled is a note, not a state
+	if !p.Known || p.State != "ONLINE" || !strings.HasPrefix(p.Status, "Some supported and requested features are not enabled") || !strings.Contains(p.Action, "zpool upgrade") || !strings.HasSuffix(p.Action, "for details.") {
+		t.Fatalf("%q / %q / %q", p.State, p.Status, p.Action)
+	}
+	if p.Scan.Kind != "scrub" || p.Scan.Duration != 1*3600+21*60+7 || p.Scan.Errors != 0 || p.Scan.Ended != time.Date(2026, 11, 8, 1, 45, 8, 0, time.Local).Unix() {
+		t.Fatalf("%+v", p.Scan)
+	}
+	if len(p.Vdevs) != 1 || p.Vdevs[0].Name != "mirror-0" || len(p.Vdevs[0].Children) != 2 || p.DataErrors != 0 {
+		t.Fatalf("%+v", p.Vdevs)
+	}
+}
+
 func TestCappedBufferKeepsTheStart(t *testing.T) {
 	b := &cappedBuffer{max: 5}
 	n, _ := b.Write([]byte("abc"))

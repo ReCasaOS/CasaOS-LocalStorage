@@ -1,0 +1,17 @@
+  pool: pool1
+ state: ONLINE
+status: Some supported and requested features are not enabled on the pool.
+	The pool can still be used, but some features are unavailable.
+action: Enable all features using 'zpool upgrade'. Once this is done,
+	the pool may no longer be accessible by software that does not support
+	the features. See zpool-features(7) for details.
+  scan: scrub repaired 0B in 01:21:07 with 0 errors on Sun Nov  8 01:45:08 2026
+config:
+
+	NAME                                                              STATE     READ WRITE CKSUM
+	pool1                                                             ONLINE       0     0     0
+	  mirror-0                                                        ONLINE       0     0     0
+	    /dev/disk/by-id/nvme-WD_BLACK_SN770_2TB_24443A806391_1-part1  ONLINE       0     0     0
+	    /dev/disk/by-id/nvme-WD_BLACK_SN770_2TB_24443A805750_1-part1  ONLINE       0     0     0
+
+errors: No known data errors
