@@ -1,0 +1,19 @@
+  pool: backup
+ state: DEGRADED
+status: One or more devices could not be opened.  Sufficient replicas exist for
+	the pool to continue functioning in a degraded state.
+action: Attach the missing device and online it using 'zpool online'.
+   see: https://openzfs.github.io/openzfs-docs/msg/ZFS-8000-2Q
+  scan: resilver in progress since Sun Oct 11 03:10:00 2026
+	1.20T scanned at 1.1G/s, 800G issued at 700M/s, 1.80T total
+	300G resilvered, 43.20% done, 00:20:11 to go
+config:
+
+	NAME                      STATE     READ WRITE CKSUM
+	backup                    DEGRADED     0     0     0
+	  raidz1-0                DEGRADED     0     0     0
+	    /dev/sda1             ONLINE       0     0     0
+	    /dev/sdb1             ONLINE       0     2     0
+	    11485761428236503841  UNAVAIL      0     0     0  was /dev/sdc1
+
+errors: 2 data errors, use '-v' for a list

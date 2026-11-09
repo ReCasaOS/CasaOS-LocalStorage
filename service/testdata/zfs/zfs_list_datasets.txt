@@ -1,0 +1,6 @@
+pool1	filesystem	1264462766080	871000000000	98304	0	/pool1	yes	0	-
+pool1/bitcoin-data	filesystem	759000000000	671000000000	759000000000	0	/pool1/bitcoin-data	yes	0	-
+pool1/appdata	filesystem	300647710720	671000000000	300647710720	31457280	/pool1/appdata	yes	0	-
+pool1/immich-db	filesystem	1057000000	671000000000	1055000000	655360	/pool1/immich-db	yes	0	-
+pool1/vm-disk	volume	107374182400	770000000000	12000000000	0	-	-	0	-
+pool1/secret	filesystem	98304	671000000000	98304	0	/pool1/secret	no	1073741824	unavailable

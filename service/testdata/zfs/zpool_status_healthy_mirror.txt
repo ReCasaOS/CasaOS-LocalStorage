@@ -1,0 +1,12 @@
+  pool: pool1
+ state: ONLINE
+  scan: scrub repaired 0B in 00:16:47 with 0 errors on Sun Oct 11 00:40:48 2026
+config:
+
+	NAME                                                                  STATE     READ WRITE CKSUM
+	pool1                                                                 ONLINE       0     0     0
+	  mirror-0                                                            ONLINE       0     0     0
+	    /dev/disk/by-id/nvme-WD_BLACK_SN770_2TB_24443A806391_1-part1      ONLINE       0     0     0
+	    /dev/disk/by-id/nvme-WD_BLACK_SN770_2TB_24443A805750_1-part1      ONLINE       0     0     0
+
+errors: No known data errors

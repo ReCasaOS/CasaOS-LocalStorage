@@ -78,6 +78,9 @@ func InitV1Router() http.Handler {
 			v1DisksGroup.DELETE("/snapraid", v1.DeleteSnapRAID)
 			v1DisksGroup.DELETE("/snapraid/job", v1.DeleteSnapRAIDJob)
 			v1DisksGroup.POST("/snapraid/:action", v1.PostSnapRAIDAction)
+			v1DisksGroup.GET("/zfs", v1.GetZFS)
+			v1DisksGroup.GET("/zfs/snapshots", v1.GetZFSSnapshots)
+			v1DisksGroup.GET("/zfs/io", v1.GetZFSIO)
 		}
 
 		v1StorageGroup := v1Group.Group("/storage")
