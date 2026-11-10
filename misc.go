@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"net/http"
 	"reflect"
 	"strings"
 	"time"
@@ -114,14 +113,7 @@ func monitorUEvent(ctx context.Context) {
 					}
 				}
 				logger.Info("disk model", zap.Any("diskModel", event.Name))
-				response, err := service.MyService.MessageBus().PublishEventWithResponse(ctx, event.SourceID, event.Name, event.Properties)
-				if err != nil {
-					logger.Error("failed to publish event to message bus", zap.Error(err), zap.Any("event", event))
-				}
-
-				if response.StatusCode() != http.StatusOK {
-					logger.Error("failed to publish event to message bus", zap.String("status", response.Status()), zap.Any("response", response))
-				}
+				service.PublishEvent(ctx, event)
 			}
 
 			switch uevent.Env["DEVTYPE"] {

@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	command2 "github.com/ReCasaOS/CasaOS-Common/utils/command"
 	"github.com/ReCasaOS/CasaOS-Common/utils/exec"
 	"github.com/ReCasaOS/CasaOS-Common/utils/file"
 	"github.com/ReCasaOS/CasaOS-Common/utils/logger"
@@ -108,9 +107,11 @@ func (d *diskService) RemoveLSBLKCache() {
 }
 
 func (d *diskService) UmountUSB(path string) error {
-	_, err := command2.ExecResultStr("source " + config.AppInfo.ShellPath + "/local-storage-helper.sh ;UDEVILUmount " + path)
-	if err != nil {
-		return err
+	// by bash, as MountDisk: "source" is no program to run, and the path is an argument, not text of a command
+	helper := filepath.Join(config.AppInfo.ShellPath, "local-storage-helper.sh")
+	if out, err := osexec.Command("bash", "-c", `source "$0"; UDEVILUmount "$1"`, helper, path).CombinedOutput(); err != nil {
+		logger.Error("error when ejecting", zap.Error(err), zap.String("path", path), zap.String("output", string(out)))
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out))) // what udevil said, for the dashboard
 	}
 
 	return nil
@@ -715,14 +716,7 @@ func (d *diskService) InitCheck() {
 			}
 			event := common.EventAdapterWithUIProperties(&eventModel)
 			logger.Info("InitCheck disk removed", zap.Any("eventModel", eventModel))
-			response, err := MyService.MessageBus().PublishEventWithResponse(context.Background(), event.SourceID, event.Name, event.Properties)
-			if err != nil {
-				logger.Error("failed to publish event to message bus", zap.Error(err), zap.Any("event", event))
-			}
-
-			if response.StatusCode() != http.StatusOK {
-				logger.Error("failed to publish event to message bus", zap.String("status", response.Status()), zap.Any("response", response))
-			}
+			PublishEvent(context.Background(), event) // at start the bus often does not answer yet: no response to read then
 		}
 	}
 	data, err := json.Marshal(diskMapNew)

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
@@ -127,6 +128,83 @@ func containsSystemStorage(node model.LSBLKModel, systemPath string) bool {
 	return false
 }
 
+// isMember says whether what a device holds is a part of something else: a RAID array, a
+// volume group, a ZFS pool, or an encrypted volume.
+func isMember(fsType string) bool {
+	switch fsType {
+	case "linux_raid_member", "LVM2_member", "zfs_member", "crypto_LUKS", "BitLocker":
+		return true
+	}
+	return false
+}
+
+var (
+	// ErrNotABlockDevice: the path is not that of a block device lsblk knows under /dev/.
+	ErrNotABlockDevice = errors.New("not a block device")
+	// ErrDeviceInUse: erasing the device would take something away that is in use.
+	ErrDeviceInUse = errors.New("the device is in use: it holds the system, a mounted filesystem, or a part of an array, a volume group, a pool or an encrypted volume")
+)
+
+// EraseRefusal says why the device at path, as lsblk describes it, must not be erased; nil when
+// it may. The dashboard offers only what is free, but its list may be old and the routes take
+// any path: this is the box's own look at the device, just before it erases it.
+//
+// A new storage is made of a whole disk that holds nothing in use (DiskInUse). With own, the
+// device is one storage about to be formatted again: it is mounted, where this box mounts a
+// storage, and may be an array, which is what a storage is; but never something mounted
+// elsewhere, the swap, a part of something else, or the place of anything in use below it.
+func EraseRefusal(path string, blk model.LSBLKModel, own bool) error {
+	if !strings.HasPrefix(path, "/dev/") || blk.Path == "" {
+		return ErrNotABlockDevice
+	}
+	if !own {
+		if blk.Type != "disk" { // a partition or a logical volume is not given a partition table
+			return ErrNotABlockDevice
+		}
+		if DiskInUse(blk) {
+			return ErrDeviceInUse
+		}
+		return nil
+	}
+	if mountedElsewhere(blk) || blk.FsType == "swap" || isMember(blk.FsType) {
+		return ErrDeviceInUse
+	}
+	for _, child := range blk.Children {
+		if DiskInUse(child) {
+			return ErrDeviceInUse
+		}
+	}
+	return nil
+}
+
+// UnmountRefusal says why the storages of the device at path must not be unmounted and their
+// folders removed; nil when they may. A storage is mounted where this box mounts one: anything
+// mounted elsewhere, on the device or below it, is the system's or the owner's own.
+func UnmountRefusal(path string, blk model.LSBLKModel) error {
+	if !strings.HasPrefix(path, "/dev/") || blk.Path == "" {
+		return ErrNotABlockDevice
+	}
+	if mountedElsewhere(blk) {
+		return ErrDeviceInUse
+	}
+	return nil
+}
+
+// mountedElsewhere says whether the device, or anything below it, is mounted outside of where
+// this box mounts a storage: /media (its own mounts, and the USB ones) and /mnt (older
+// installs). The system, its boot partition, the swap and a /home of its own all are.
+func mountedElsewhere(blk model.LSBLKModel) bool {
+	if blk.MountPoint != "" && !strings.HasPrefix(blk.MountPoint, "/media/") && !strings.HasPrefix(blk.MountPoint, "/mnt/") {
+		return true
+	}
+	for _, child := range blk.Children {
+		if mountedElsewhere(child) {
+			return true
+		}
+	}
+	return false
+}
+
 // StorageUsage adds up the space of the mounted filesystems of an lsblk tree,
 // each filesystem once however many disks and mount points it appears under.
 func StorageUsage(disks []model.LSBLKModel) FilesystemStats {
@@ -161,14 +239,7 @@ func StorageUsage(disks []model.LSBLKModel) FilesystemStats {
 // BitLocker), open or not. A locked container mounts nothing and its format is
 // not one CasaOS reads, so formatting was the only thing offered for it.
 func DiskInUse(disk model.LSBLKModel) bool {
-	switch {
-	case disk.MountPoint != "",
-		strings.HasPrefix(disk.Type, "raid"),
-		disk.FsType == "linux_raid_member",
-		disk.FsType == "LVM2_member",
-		disk.FsType == "zfs_member",
-		disk.FsType == "crypto_LUKS",
-		disk.FsType == "BitLocker":
+	if disk.MountPoint != "" || strings.HasPrefix(disk.Type, "raid") || isMember(disk.FsType) {
 		return true
 	}
 	for _, child := range disk.Children {
