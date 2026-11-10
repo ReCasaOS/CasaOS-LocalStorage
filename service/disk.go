@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -401,9 +402,13 @@ func (d *diskService) MountDisk(path, mountPoint string) (string, error) {
 		return "", err
 	}
 
-	if out, err := command2.OnlyExec("source " + config.AppInfo.ShellPath + "/local-storage-helper.sh ;do_mount " + path + " " + mountPoint); err != nil {
+	// The device and the mount point are arguments of the shell, never part of its
+	// command line: the mount point is made of the label and the model of the disk,
+	// which say what they like ("My Passport", or a command).
+	helper := filepath.Join(config.AppInfo.ShellPath, "local-storage-helper.sh")
+	if out, err := osexec.Command("bash", "-c", `source "$0"; do_mount "$1" "$2"`, helper, path, mountPoint).CombinedOutput(); err != nil {
 		logger.Error("error when mounting", zap.Error(err), zap.String("path", path), zap.String("mount point", mountPoint), zap.String("output", string(out)))
-		return out, err
+		return string(out), err
 	}
 
 	// return "", partition.ProbePartition(path)

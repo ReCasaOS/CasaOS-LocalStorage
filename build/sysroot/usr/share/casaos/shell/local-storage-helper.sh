@@ -75,13 +75,13 @@ do_mount() {
     exit 1
   fi
 
-  # Get info for this drive: $ID_FS_LABEL and $ID_FS_TYPE
-  DRIVE_INFO=$(blkid -o udev "${DEVICE}" | grep -i -e "ID_FS_LABEL" -e "ID_FS_TYPE") || {
+  # The filesystem type, taken as a value: nothing the drive says about itself
+  # (its label, the name of its partition) is ever run.
+  ID_FS_TYPE=$(blkid -o value -s TYPE -- "${DEVICE}") || true
+  if [ -z "${ID_FS_TYPE}" ]; then
     echo "${DEVICE} does not have a filesystem or it might be corrupted. Please consider format it."
     exit 1
-  }
-
-  eval "${DRIVE_INFO}"
+  fi
 
   LABEL=$2
   if grep -q " ${LABEL} " /etc/mtab; then
