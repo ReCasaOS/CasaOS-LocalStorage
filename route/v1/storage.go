@@ -10,9 +10,11 @@
 package v1
 
 import (
+	"errors"
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -124,6 +126,14 @@ func PostAddStorage(ctx echo.Context) error {
 	defer service.MyService.Disk().RemoveLSBLKCache()
 	defer delete(diskMap, path)
 	currentDisk := service.MyService.Disk().GetDiskInfo(path)
+	// before anything is unmounted or erased; a disk that is only mounted must still be one
+	if err := service.EraseRefusal(path, currentDisk, false); err != nil && (format || errors.Is(err, service.ErrNotABlockDevice)) {
+		status := http.StatusConflict
+		if errors.Is(err, service.ErrNotABlockDevice) {
+			status = http.StatusBadRequest
+		}
+		return ctx.JSON(status, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+	}
 	if format {
 
 		if err := service.MyService.Disk().UmountPointAndRemoveDir(currentDisk); err != nil {
@@ -288,6 +298,17 @@ func PutFormatStorage(ctx echo.Context) error {
 	if service.SnapRAIDUses(diskInfo.MountPoint) {
 		return ctx.JSON(http.StatusConflict, model.Result{Success: common_err.SERVICE_ERROR, Message: service.ErrStorageInSnapRAID.Error()})
 	}
+	if err := service.EraseRefusal(path, diskInfo, true); err != nil { // before anything is unmounted or erased
+		status := http.StatusConflict
+		if errors.Is(err, service.ErrNotABlockDevice) {
+			status = http.StatusBadRequest
+		}
+		return ctx.JSON(status, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+	}
+	// the merged storage is made of mount points: formatting one takes its files out of the merge
+	if taken := raidTakenMounts(); diskInfo.MountPoint != "" && slices.Contains(taken, diskInfo.MountPoint) || diskInfo.UUID != "" && slices.Contains(taken, diskInfo.UUID) {
+		return ctx.JSON(http.StatusConflict, model.Result{Success: common_err.SERVICE_ERROR, Message: "the merged storage or SnapRAID uses this storage: take it out of it first"})
+	}
 	if err := service.MyService.Disk().UmountPointAndRemoveDir(diskInfo); err != nil {
 		return ctx.JSON(http.StatusInternalServerError, model.Result{Success: common_err.REMOVE_MOUNT_POINT_ERROR, Message: err.Error()})
 	}
@@ -388,6 +409,13 @@ func DeleteStorage(ctx echo.Context) error {
 	diskInfo := service.MyService.Disk().GetDiskInfo(path)
 	if service.SnapRAIDUses(diskInfo.MountPoint) {
 		return ctx.JSON(http.StatusConflict, model.Result{Success: common_err.SERVICE_ERROR, Message: service.ErrStorageInSnapRAID.Error()})
+	}
+	if err := service.UnmountRefusal(path, diskInfo); err != nil { // before anything is unmounted and its folder removed
+		status := http.StatusConflict
+		if errors.Is(err, service.ErrNotABlockDevice) {
+			status = http.StatusBadRequest
+		}
+		return ctx.JSON(status, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
 	}
 	if err := service.MyService.Disk().UmountPointAndRemoveDir(diskInfo); err != nil {
 		return ctx.JSON(http.StatusInternalServerError, model.Result{Success: common_err.REMOVE_MOUNT_POINT_ERROR, Message: err.Error()})

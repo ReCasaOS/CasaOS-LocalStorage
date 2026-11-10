@@ -1,7 +1,7 @@
 #!/bin/bash
 
 UDEVILUmount(){
-  $sudo_cmd udevil umount -f $1
+  $sudo_cmd udevil umount -f "$1"
 }
 
 #获磁盘的插入路径

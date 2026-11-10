@@ -177,6 +177,13 @@ func DeleteDisksUmount(ctx echo.Context) error {
 	}
 
 	diskInfo := service.MyService.Disk().GetDiskInfo(path)
+	if err := service.UnmountRefusal(path, diskInfo); err != nil { // before anything is unmounted and its folder removed
+		status := http.StatusConflict
+		if errors.Is(err, service.ErrNotABlockDevice) {
+			status = http.StatusBadRequest
+		}
+		return ctx.JSON(status, model.Result{Success: common_err.SERVICE_ERROR, Message: err.Error()})
+	}
 	if len(diskInfo.Children) == 0 && service.IsDiskSupported(diskInfo) {
 		t := diskInfo
 		t.Children = nil
