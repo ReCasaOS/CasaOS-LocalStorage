@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	osexec "os/exec"
@@ -728,8 +727,10 @@ func (d *diskService) InitCheck() {
 
 func (d *diskService) GetSystemDf() (model.DFDiskSpace, error) {
 	out, err := exec.Command("df", "-kPT").Output()
-	if err != nil {
-		log.Fatal(err)
+	// df exits 1 when one mount cannot be read (a dead network or FUSE mount) and still lists the others;
+	// this was log.Fatal, which took the whole service down on every GET /v1/storage
+	if err != nil && len(out) == 0 {
+		return model.DFDiskSpace{}, err
 	}
 
 	outputStr := string(out)
