@@ -81,6 +81,7 @@ func InitV1Router() http.Handler {
 			v1DisksGroup.GET("/zfs", v1.GetZFS)
 			v1DisksGroup.GET("/zfs/snapshots", v1.GetZFSSnapshots)
 			v1DisksGroup.GET("/zfs/io", v1.GetZFSIO)
+			v1DisksGroup.GET("/unreadable", v1.GetUnreadableMounts)
 		}
 
 		v1StorageGroup := v1Group.Group("/storage")
