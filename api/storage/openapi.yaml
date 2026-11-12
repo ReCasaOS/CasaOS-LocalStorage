@@ -4,18 +4,26 @@ info:
   title: CasaOS storage layer API (proposal)
   version: v2
   description: |-
-    A backend-neutral storage layer: one pool over the drives, made, grown, repaired and checked
+    A backend-neutral storage layer: pools over the drives, made, grown, repaired and checked
     from the dashboard. The words are the person's (layout, protection, disk), not the backend's
     (btrfs profile, md level): the service picks the backend per layout and says which it used.
 
-    - **Layouts**: `none` (capacity adds up), `mirror` with `copies`, `parity` with `parity` disks.
+    **A contract, not one service's API**: several backends implement it; a client targets only this.
+
+    - **Pools**: a list; each has an `id`, which every intent but `create-pool` and `wipe-disk` names.
+      How many a box may hold is the backend's policy, shown by its verbs (`create-pool` offered or not).
+    - **Layouts**: `kind` is the protection: `none` (capacity adds up), `mirror` with `copies`, `parity`
+      with `parity` disks. `stripe` is speed only (data spread over all disks), it changes no `tolerates`:
+      `mirror{copies:2, stripe}` = RAID 10, `none{stripe}` = RAID 0. A backend lists what it offers in
+      `GET /layouts`.
     - **Plan → preview → apply**: an intent gives a plan (steps, exact commands, effects, disks erased,
       text to type); applying makes the plan again from a fresh look and runs it only when nothing
       changed; it then runs as a job. Nothing from a request reaches a command line other than a disk
       the fresh listing offers for that action.
     - **Verbs**: each pool and drive lists what can be asked of it now; a client shows only those.
 
-    Implemented by ReCasaNix's recasanix-storage (btrfs; parity layouts on md with btrfs on top).
+    Implementations: LocalStorage (reference; md), ReCasaNix's recasanix-storage (one pool at most;
+    btrfs, parity layouts on md with btrfs on top).
     CasaOS-UI's Storage manager shows its Pool tab when `GET /v2/storage` answers.
 
 servers:
@@ -27,7 +35,7 @@ security:
 paths:
   /:
     get:
-      summary: The pool, the drives, the layouts on the free drives, recent jobs
+      summary: The pools, the drives, the layouts on the free drives, recent jobs
       operationId: getStorage
       responses:
         "200":
@@ -173,15 +181,19 @@ components:
 
     Verb:
       type: string
-      enum: [create-pool, add-disk, replace-disk, remove-disk, change-layout, check, cancel-check, mount-degraded, wipe-disk]
+      enum: [create-pool, delete-pool, add-disk, replace-disk, remove-disk, change-layout, restore-layout, check, cancel-check, mount-degraded, wipe-disk]
+      description: |-
+        delete-pool: the pool taken apart, its disks blank (erases; typed confirmation) ·
+        restore-layout: data not in the pool's layout (written while a disk was missing) put back into it
 
     Layout:
       type: object
       required: [kind]
       properties:
-        kind: { type: string, enum: [none, mirror, parity] }
+        kind: { type: string, enum: [none, mirror, parity], description: "the protection" }
         copies: { type: integer, description: "mirror: 2 or 3" }
         parity: { type: integer, description: "parity: 1 (RAID 5) or 2 (RAID 6)" }
+        stripe: { type: boolean, description: "speed only: none → RAID 0, mirror{copies:2} → RAID 10; not with parity" }
 
     LayoutOption:
       type: object
@@ -199,9 +211,13 @@ components:
     Overview:
       type: object
       properties:
-        pool:
-          nullable: true
-          allOf: [{ $ref: "#/components/schemas/Pool" }]
+        pools:
+          type: array
+          items: { $ref: "#/components/schemas/Pool" }
+        verbs:
+          type: array
+          items: { $ref: "#/components/schemas/Verb" }
+          description: what can be asked of the box outside any pool (create-pool)
         drives:
           type: array
           items: { $ref: "#/components/schemas/Drive" }
@@ -216,6 +232,7 @@ components:
     Pool:
       type: object
       properties:
+        id: { type: string, description: "what an intent names the pool by" }
         name: { type: string }
         backend: { type: string, enum: [btrfs, md] }
         layout: { $ref: "#/components/schemas/Layout" }
@@ -241,6 +258,7 @@ components:
         verbs:
           type: array
           items: { $ref: "#/components/schemas/Verb" }
+        problem: { type: string, description: "what is wrong beyond the state, for the person" }
 
     PoolMember:
       type: object
@@ -268,7 +286,7 @@ components:
           description: |-
             system: carries the OS · member: of the pool · free: blank, usable · small: blank, under the
             minimum size · foreign: holds something else, not in use (can be wiped) · busy: in use elsewhere
-        pool: { type: string }
+        pool: { type: string, description: "member: the pool's id" }
         content: { type: string, description: "what is on it: btrfs, ext4, linux_raid_member, partitions…" }
         verbs:
           type: array
@@ -279,6 +297,7 @@ components:
       required: [verb]
       properties:
         verb: { $ref: "#/components/schemas/Verb" }
+        pool: { type: string, description: "the pool's id; every verb but create-pool and wipe-disk ('' = the only pool)" }
         layout: { $ref: "#/components/schemas/Layout" }
         disks:
           type: array
