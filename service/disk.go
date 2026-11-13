@@ -338,7 +338,11 @@ func (d *diskService) LSBLK(isUseCache bool) []model.LSBLKModel {
 			blk.Health = "OK"
 		}
 
-		blk.FSUsed = json.Number(fmt.Sprintf("%d", fsused))
+		// A disk with no partitions carries its own filesystem: keep lsblk's
+		// fsused instead of replacing it with the (empty) sum of its children.
+		if len(blk.Children) > 0 {
+			blk.FSUsed = json.Number(fmt.Sprintf("%d", fsused))
+		}
 		blk.Children = blkChildren
 		if fsused > 0 {
 			blk.UsedPercent, err = strconv.ParseFloat(fmt.Sprintf("%.4f", float64(fsused)/float64(blk.Size)), 64)
