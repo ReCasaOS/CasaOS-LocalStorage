@@ -140,6 +140,44 @@ func isMember(fsType string) bool {
 	return false
 }
 
+// isFirmware says whether a partition is one a board boots from: no filesystem,
+// and a name the board's loader looks for (the eMMC of a NanoPi R5S is seven of
+// them, ReCasaOS/CasaOS#155). Nothing mounts or holds them, and a board without
+// them does not start.
+func isFirmware(blk model.LSBLKModel) bool {
+	if blk.FsType != "" {
+		return false
+	}
+	switch strings.ToLower(blk.PartLabel) {
+	case "uboot", "u-boot", "idbloader", "loader", "loader1", "loader2", "bootloader", "trust",
+		"misc", "dtbo", "resource", "kernel", "boot", "recovery":
+		return true
+	}
+	return false
+}
+
+// holdsFirmwareLayout says whether a drive is laid out as a device's own
+// storage: several partitions with no filesystem, each given a name of its own.
+// The names differ with every maker (Rockchip, Amlogic, Jetson, Qualcomm,
+// ChromeOS: dozens of them), so the shape is read, not a list. A partitioning
+// tool's default name says nothing, and one named partition alone is not a
+// layout: an old PC disk keeps being the owner's to erase.
+func holdsFirmwareLayout(disk model.LSBLKModel) bool {
+	named := 0
+	for _, part := range disk.Children {
+		if part.FsType != "" {
+			continue
+		}
+		switch strings.ToLower(part.PartLabel) {
+		case "", "primary", "logical", "linux", "linux filesystem", "data", "basic data partition",
+			"microsoft reserved partition", "bios boot partition", "bios_grub":
+		default:
+			named++
+		}
+	}
+	return named >= 2
+}
+
 var (
 	// ErrNotABlockDevice: the path is not that of a block device lsblk knows under /dev/.
 	ErrNotABlockDevice = errors.New("not a block device")
@@ -244,8 +282,12 @@ func StorageUsage(disks []model.LSBLKModel) FilesystemStats {
 // lsblk does not see every mount: with "/" as an overlay (FriendlyElec images)
 // the system's partitions show no mount point at all, and the system drive was
 // offered as a free one. So the kernel is asked too.
+//
+// Nor does anything hold the firmware a board boots from (isFirmware,
+// holdsFirmwareLayout): it is read before the kernel runs.
 func DiskInUse(disk model.LSBLKModel) bool {
-	if disk.MountPoint != "" || strings.HasPrefix(disk.Type, "raid") || isMember(disk.FsType) || DeviceBusy(disk.Path) {
+	if disk.MountPoint != "" || strings.HasPrefix(disk.Type, "raid") || isMember(disk.FsType) || isFirmware(disk) ||
+		holdsFirmwareLayout(disk) || DeviceBusy(disk.Path) {
 		return true
 	}
 	for _, child := range disk.Children {
