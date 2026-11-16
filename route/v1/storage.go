@@ -42,12 +42,15 @@ func GetStorageList(ctx echo.Context) error {
 
 	blkList := service.MyService.Disk().LSBLK(false)
 	systemPath := ""
-	if df, err := service.MyService.Disk().GetSystemDf(); err == nil {
+	df, dfErr := service.MyService.Disk().GetSystemDf()
+	if dfErr == nil {
 		systemPath = df.FileSystem
 	}
 
 	storages := []model1.Storages{}
+	systemFound := false
 	for _, device := range service.StorageDevices(blkList, systemPath) {
+		systemFound = systemFound || device.System
 		if device.System && !showSystem {
 			continue
 		}
@@ -93,6 +96,24 @@ func GetStorageList(ctx echo.Context) error {
 
 		if len(storage.Children) > 0 {
 			storages = append(storages, storage)
+		}
+	}
+
+	// "/" is no block device (an overlay) and lsblk ties it to no drive: the
+	// system storage is the space df gives for /, on the drive the kernel holds.
+	if showSystem && !systemFound && dfErr == nil && !strings.HasPrefix(df.FileSystem, "/dev/") {
+		if disk, ok := service.HiddenSystemDisk(blkList); ok {
+			storages = append([]model1.Storages{{
+				DiskName:  "System",
+				DiskModel: disk.Model,
+				Path:      disk.Path,
+				Size:      disk.Size,
+				Type:      disk.Tran,
+				Children: []model1.Storage{{
+					MountPoint: "/", Size: df.Blocks, Avail: df.Available, Used: df.Used,
+					Path: df.FileSystem, Type: df.Type, Label: "System",
+				}},
+			}}, storages...)
 		}
 	}
 

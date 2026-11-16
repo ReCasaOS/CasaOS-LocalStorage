@@ -274,3 +274,32 @@ var DeviceBusy = func(path string) bool {
 
 	return false
 }
+
+// HiddenSystemDisk is the drive the system runs from when lsblk ties "/" to no
+// device: with "/" as an overlay (FriendlyElec images) the partitions under it
+// are mounted out of sight. It is the one supported disk with a filesystem that
+// lsblk shows unmounted and the kernel holds. With none or several, it does not
+// guess.
+func HiddenSystemDisk(disks []model.LSBLKModel) (model.LSBLKModel, bool) {
+	var found []model.LSBLKModel
+	for _, disk := range disks {
+		if IsDiskSupported(disk) && holdsHiddenFilesystem(disk) {
+			found = append(found, disk)
+		}
+	}
+	if len(found) != 1 {
+		return model.LSBLKModel{}, false
+	}
+	return found[0], true
+}
+
+func holdsHiddenFilesystem(node model.LSBLKModel) bool {
+	for _, child := range node.Children {
+		if holdsHiddenFilesystem(child) {
+			return true
+		}
+	}
+	// a member of an array, a group or a pool is held too, and is not a system
+	return len(node.Children) == 0 && node.MountPoint == "" && node.FsType != "" && node.FsType != "swap" &&
+		!isMember(node.FsType) && DeviceBusy(node.Path)
+}
