@@ -140,6 +140,22 @@ func isMember(fsType string) bool {
 	return false
 }
 
+// isFirmware says whether a partition is one a board boots from: no filesystem,
+// and a name the board's loader looks for (the eMMC of a NanoPi R5S is seven of
+// them, ReCasaOS/CasaOS#155). Nothing mounts or holds them, and a board without
+// them does not start.
+func isFirmware(blk model.LSBLKModel) bool {
+	if blk.FsType != "" {
+		return false
+	}
+	switch strings.ToLower(blk.PartLabel) {
+	case "uboot", "u-boot", "idbloader", "loader", "loader1", "loader2", "bootloader", "trust",
+		"misc", "dtbo", "resource", "kernel", "boot", "recovery":
+		return true
+	}
+	return false
+}
+
 var (
 	// ErrNotABlockDevice: the path is not that of a block device lsblk knows under /dev/.
 	ErrNotABlockDevice = errors.New("not a block device")
@@ -244,8 +260,11 @@ func StorageUsage(disks []model.LSBLKModel) FilesystemStats {
 // lsblk does not see every mount: with "/" as an overlay (FriendlyElec images)
 // the system's partitions show no mount point at all, and the system drive was
 // offered as a free one. So the kernel is asked too.
+//
+// Nor does anything hold the firmware a board boots from (isFirmware): it is
+// read before the kernel runs.
 func DiskInUse(disk model.LSBLKModel) bool {
-	if disk.MountPoint != "" || strings.HasPrefix(disk.Type, "raid") || isMember(disk.FsType) || DeviceBusy(disk.Path) {
+	if disk.MountPoint != "" || strings.HasPrefix(disk.Type, "raid") || isMember(disk.FsType) || isFirmware(disk) || DeviceBusy(disk.Path) {
 		return true
 	}
 	for _, child := range disk.Children {

@@ -43,6 +43,7 @@ type LSBLKModel struct {
 	Children    []LSBLKModel `json:"children"`
 	SubSystems  string       `json:"subsystems"`
 	Label       string       `json:"label"`
+	PartLabel   string       `json:"partlabel"`
 	// 详情特有
 	StartSector uint64 `json:"start_sector,omitempty"`
 	Rota        bool   `json:"rota"` // true(hhd) false(ssd)

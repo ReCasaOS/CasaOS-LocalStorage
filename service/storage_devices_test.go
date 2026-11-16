@@ -214,3 +214,24 @@ func TestADiskTheKernelHoldsIsNotOfferedForFormatting(t *testing.T) {
 		t.Error("a drive nothing holds: kept from formatting")
 	}
 }
+
+func TestADriveABoardBootsFromIsInUse(t *testing.T) {
+	emmc := model.LSBLKModel{Path: "/dev/mmcblk2", Type: "disk", Children: []model.LSBLKModel{
+		{Path: "/dev/mmcblk2p1", Type: "part", PartLabel: "uboot"},
+		{Path: "/dev/mmcblk2p5", Type: "part", PartLabel: "kernel"},
+	}}
+	if !DiskInUse(emmc) {
+		t.Fatal("the eMMC a board boots from was free to format")
+	}
+	if err := EraseRefusal(emmc.Path, emmc, false); err != ErrDeviceInUse {
+		t.Fatalf("erasing it: %v", err)
+	}
+	// an old system disk: its boot partition has a filesystem, and is the owner's to erase
+	old := model.LSBLKModel{Path: "/dev/sdx", Type: "disk", Children: []model.LSBLKModel{
+		{Path: "/dev/sdx1", Type: "part", PartLabel: "boot", FsType: "vfat"},
+		{Path: "/dev/sdx2", Type: "part", PartLabel: "primary"},
+	}}
+	if DiskInUse(old) {
+		t.Fatal("a disk with nothing in use was held back")
+	}
+}
