@@ -2,8 +2,10 @@ package service
 
 import (
 	"errors"
+	"os"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/ReCasaOS/CasaOS-LocalStorage/model"
 )
@@ -238,8 +240,12 @@ func StorageUsage(disks []model.LSBLKModel) FilesystemStats {
 // array, group or pool is assembled right now, or an encrypted volume (LUKS,
 // BitLocker), open or not. A locked container mounts nothing and its format is
 // not one CasaOS reads, so formatting was the only thing offered for it.
+//
+// lsblk does not see every mount: with "/" as an overlay (FriendlyElec images)
+// the system's partitions show no mount point at all, and the system drive was
+// offered as a free one. So the kernel is asked too.
 func DiskInUse(disk model.LSBLKModel) bool {
-	if disk.MountPoint != "" || strings.HasPrefix(disk.Type, "raid") || isMember(disk.FsType) {
+	if disk.MountPoint != "" || strings.HasPrefix(disk.Type, "raid") || isMember(disk.FsType) || DeviceBusy(disk.Path) {
 		return true
 	}
 	for _, child := range disk.Children {
@@ -247,6 +253,24 @@ func DiskInUse(disk model.LSBLKModel) bool {
 			return true
 		}
 	}
+
+	return false
+}
+
+// DeviceBusy says whether the kernel holds the block device at path: mounted,
+// in or out of sight, or claimed by an array or a mapping. An exclusive open is
+// refused with EBUSY then, and reads nothing. Any other answer, a device that is
+// gone included, is "not held": the other checks of DiskInUse still stand.
+// A variable, for the tests: their device names may exist on the machine that runs them.
+var DeviceBusy = func(path string) bool {
+	if !strings.HasPrefix(path, "/dev/") {
+		return false
+	}
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_EXCL, 0)
+	if err != nil {
+		return errors.Is(err, syscall.EBUSY)
+	}
+	_ = f.Close()
 
 	return false
 }

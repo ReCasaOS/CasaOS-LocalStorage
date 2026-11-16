@@ -194,3 +194,23 @@ func TestADiskIsInUseWhenAnythingBelowItIs(t *testing.T) {
 		}
 	}
 }
+
+// the fixtures name devices (/dev/sda…) that the machine running the tests may have, and hold
+func init() { DeviceBusy = func(string) bool { return false } }
+
+// With "/" as an overlay lsblk shows no mount point on the system drive: the kernel still holds it.
+func TestADiskTheKernelHoldsIsNotOfferedForFormatting(t *testing.T) {
+	was := DeviceBusy
+	DeviceBusy = func(path string) bool { return path == "/dev/nvme0n1p2" }
+	t.Cleanup(func() { DeviceBusy = was })
+
+	system := model.LSBLKModel{Path: "/dev/nvme0n1", Type: "disk", Children: []model.LSBLKModel{
+		{Path: "/dev/nvme0n1p1", FsType: "ext4"}, {Path: "/dev/nvme0n1p2", FsType: "ext4"},
+	}}
+	if !DiskInUse(system) {
+		t.Error("the system drive under an overlay root: offered for formatting")
+	}
+	if DiskInUse(model.LSBLKModel{Path: "/dev/sdb", Type: "disk", Children: []model.LSBLKModel{{Path: "/dev/sdb1", FsType: "ext4"}}}) {
+		t.Error("a drive nothing holds: kept from formatting")
+	}
+}

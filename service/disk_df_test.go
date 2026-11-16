@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/ReCasaOS/CasaOS-LocalStorage/model"
+
 	"gotest.tools/v3/assert"
 )
 
@@ -42,4 +44,14 @@ func TestGetSystemDfIsAnErrorWhenDfGivesNothing(t *testing.T) {
 	_, err := (&diskService{}).GetSystemDf()
 
 	assert.Assert(t, err != nil)
+}
+
+// The dashboard falls back to df when lsblk shows no mount point (overlay root).
+func TestDfStatsReadsTheBytesOfTheSystemLine(t *testing.T) {
+	got, ok := DfStats(model.DFDiskSpace{Blocks: "1024000", Used: "409600", Available: "614400"})
+	assert.Assert(t, ok)
+	assert.Equal(t, got, FilesystemStats{Size: 1024000, Avail: 614400, Used: 409600, MountCount: 1})
+
+	_, ok = DfStats(model.DFDiskSpace{})
+	assert.Assert(t, !ok)
 }

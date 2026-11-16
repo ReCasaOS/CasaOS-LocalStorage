@@ -76,3 +76,6 @@ func TestGetDiskListSmartStatus(t *testing.T) {
 		}
 	}
 }
+
+// the fixtures name devices (/dev/sda…) that the machine running the tests may have, and hold
+func init() { service.DeviceBusy = func(string) bool { return false } }

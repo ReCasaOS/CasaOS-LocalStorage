@@ -51,6 +51,16 @@ func sendDiskBySocket() {
 		status.Size, status.Avail, status.Used = stats.Size, stats.Avail, stats.Used
 	}
 
+	// lsblk shows no mount point at all when "/" is an overlay (FriendlyElec
+	// images): the widget read 0 of 0. df still knows the space of "/".
+	if status.Size == 0 {
+		if df, err := service.MyService.Disk().GetSystemDf(); err == nil {
+			if stats, ok := service.DfStats(df); ok {
+				status.Size, status.Avail, status.Used = stats.Size, stats.Avail, stats.Used
+			}
+		}
+	}
+
 	status.SmartStatus = model.AggregateSmartHealth(healths...)
 	status.Health = status.SmartStatus != model.SmartHealthFailed
 	message := make(map[string]interface{})
