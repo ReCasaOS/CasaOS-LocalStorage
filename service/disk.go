@@ -806,6 +806,17 @@ type FilesystemStats struct {
 	MountCount int
 }
 
+// DfStats reads the space of a df line, in bytes as GetSystemDf gives it.
+func DfStats(df model.DFDiskSpace) (FilesystemStats, bool) {
+	size, err1 := strconv.ParseUint(df.Blocks, 10, 64)
+	used, err2 := strconv.ParseUint(df.Used, 10, 64)
+	avail, err3 := strconv.ParseUint(df.Available, 10, 64)
+	if err1 != nil || err2 != nil || err3 != nil || size == 0 {
+		return FilesystemStats{}, false
+	}
+	return FilesystemStats{Size: size, Avail: avail, Used: used, MountCount: 1}, true
+}
+
 // MountedFilesystemStats recursively aggregates mounted filesystem values
 // from an lsblk tree. FSUsed is used for Used instead of Size-Avail because
 // the latter includes filesystem-reserved space and unallocated partitions.
