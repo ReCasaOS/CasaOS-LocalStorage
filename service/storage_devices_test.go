@@ -235,3 +235,31 @@ func TestADriveABoardBootsFromIsInUse(t *testing.T) {
 		t.Fatal("a disk with nothing in use was held back")
 	}
 }
+
+func TestADriveLaidOutAsADevicesOwnStorageIsInUse(t *testing.T) {
+	// a Jetson: none of these names is in the list of isFirmware
+	jetson := model.LSBLKModel{Path: "/dev/mmcblk0", Type: "disk", Children: []model.LSBLKModel{
+		{Path: "/dev/mmcblk0p1", Type: "part", PartLabel: "APP", FsType: "ext4"},
+		{Path: "/dev/mmcblk0p2", Type: "part", PartLabel: "TBC"},
+		{Path: "/dev/mmcblk0p3", Type: "part", PartLabel: "secure-os"},
+	}}
+	if !DiskInUse(jetson) {
+		t.Fatal("a drive with a device's firmware partitions was free to format")
+	}
+	// an old Windows disk, and a disk this box partitioned and has not formatted yet
+	for name, disk := range map[string]model.LSBLKModel{
+		"old Windows disk": {Path: "/dev/sdx", Type: "disk", Children: []model.LSBLKModel{
+			{Path: "/dev/sdx1", Type: "part", PartLabel: "EFI system partition", FsType: "vfat"},
+			{Path: "/dev/sdx2", Type: "part", PartLabel: "Microsoft reserved partition"},
+			{Path: "/dev/sdx3", Type: "part", PartLabel: "Basic data partition"},
+		}},
+		"one named partition": {Path: "/dev/sdy", Type: "disk", Children: []model.LSBLKModel{
+			{Path: "/dev/sdy1", Type: "part", PartLabel: "scratch"},
+			{Path: "/dev/sdy2", Type: "part", PartLabel: "primary"},
+		}},
+	} {
+		if DiskInUse(disk) {
+			t.Fatalf("%s: held back", name)
+		}
+	}
+}
