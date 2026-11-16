@@ -17,11 +17,15 @@ import (
 type storageStubDisk struct {
 	stubDisk
 	systemPath string
+	df         model1.DFDiskSpace // the whole df line of /, when a test needs more than its device
 	dfErr      error
 	labels     map[string]string
 }
 
 func (s storageStubDisk) GetSystemDf() (model1.DFDiskSpace, error) {
+	if s.df.FileSystem != "" {
+		return s.df, s.dfErr
+	}
 	return model1.DFDiskSpace{FileSystem: s.systemPath}, s.dfErr
 }
 
@@ -202,6 +206,73 @@ func TestAMalformedAddStorageRequestIsABadRequest(t *testing.T) {
 		}
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("%s: status %d, want 400: %s", body, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// overlayRootDisks is the NanoPi R5S of ReCasaOS/CasaOS#155: "/" is an overlay over the two
+// NVMe partitions, mounted out of lsblk's sight, and the eMMC holds the bootloader only.
+func overlayRootDisks() []model1.LSBLKModel {
+	return []model1.LSBLKModel{
+		{Path: "/dev/mmcblk2", Name: "mmcblk2", Type: "disk", SubSystems: "block:mmc:mmc_host:platform", Children: []model1.LSBLKModel{
+			{Path: "/dev/mmcblk2p1", Type: "part"},
+		}},
+		{Path: "/dev/nvme0n1", Name: "nvme0n1", Type: "disk", Tran: "nvme", Model: "IM2P33F8ABR2-256GB", Size: 256000, Children: []model1.LSBLKModel{
+			{Path: "/dev/nvme0n1p1", Type: "part", FsType: "ext4"},
+			{Path: "/dev/nvme0n1p2", Type: "part", FsType: "ext4"},
+		}},
+	}
+}
+
+func TestGetStorageListTiesAnOverlayRootToTheDriveTheKernelHolds(t *testing.T) {
+	was := service.DeviceBusy
+	service.DeviceBusy = func(path string) bool { return strings.HasPrefix(path, "/dev/nvme0n1") }
+	t.Cleanup(func() { service.DeviceBusy = was })
+	useStubDisk(t, storageStubDisk{
+		stubDisk: stubDisk{blk: overlayRootDisks()},
+		df:       model1.DFDiskSpace{FileSystem: "overlay", Type: "overlay", Blocks: "234000", Used: "1800", Available: "221000"},
+	})
+
+	var shown storageList
+	getJSON(t, GetStorageList, "/v1/storage?system=show", &shown)
+	if len(shown.Data) != 1 {
+		t.Fatalf("the system storage alone: %+v", shown.Data)
+	}
+	system := shown.Data[0]
+	if system.DiskName != "System" || system.DiskModel != "IM2P33F8ABR2-256GB" || system.Path != "/dev/nvme0n1" || len(system.Children) != 1 {
+		t.Fatalf("the system storage, on its drive: %+v", system)
+	}
+	root := system.Children[0]
+	if root.MountPoint != "/" || root.Label != "System" || root.Size != "234000" || root.Used != "1800" || root.Avail != "221000" || root.Type != "overlay" {
+		t.Fatalf("the space of /, as df gives it: %+v", root)
+	}
+
+	var hidden storageList
+	getJSON(t, GetStorageList, "/v1/storage", &hidden)
+	if len(hidden.Data) != 0 {
+		t.Fatalf("the system storage listed as user storage: %+v", hidden.Data)
+	}
+}
+
+func TestGetStorageListGuessesNoSystemDriveWhenItCannotTell(t *testing.T) {
+	two := append(overlayRootDisks(), model1.LSBLKModel{Path: "/dev/sda", Type: "disk", Tran: "sata", Children: []model1.LSBLKModel{
+		{Path: "/dev/sda1", Type: "part", FsType: "ext4"},
+	}})
+	pool := []model1.LSBLKModel{{Path: "/dev/sdb", Type: "disk", Tran: "sata", Children: []model1.LSBLKModel{
+		{Path: "/dev/sdb1", Type: "part", FsType: "zfs_member"},
+	}}}
+	for name, blk := range map[string][]model1.LSBLKModel{"two held drives": two, "a pool member": pool} {
+		was := service.DeviceBusy
+		service.DeviceBusy = func(string) bool { return true }
+		useStubDisk(t, storageStubDisk{
+			stubDisk: stubDisk{blk: blk},
+			df:       model1.DFDiskSpace{FileSystem: "overlay", Type: "overlay", Blocks: "234000", Used: "1800", Available: "221000"},
+		})
+		var shown storageList
+		getJSON(t, GetStorageList, "/v1/storage?system=show", &shown)
+		service.DeviceBusy = was
+		if len(shown.Data) != 0 {
+			t.Fatalf("%s: a system drive was guessed: %+v", name, shown.Data)
 		}
 	}
 }
