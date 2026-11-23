@@ -9,7 +9,9 @@ import (
 const (
 	MergerFS               = "mergerfs"
 	MergerFSFullName       = "fuse.mergerfs"
-	MergerFSDefaultOptions = "category.create=mfs,moveonenospc=true,minfreespace=1M"
+	// allow_other must stay explicit: mergerfs before 2.35 (Ubuntu 24.04 ships 2.33.5)
+	// leaves it off, and then only root can read /DATA (CasaOS#175).
+	MergerFSDefaultOptions = "defaults,allow_other,use_ino,category.create=mfs,moveonenospc=true,minfreespace=1M"
 
 	MergerFSExtendedKeySource = "mergerfs.src" // corresponding value could be for example: /var/lib/casaos/files
 
