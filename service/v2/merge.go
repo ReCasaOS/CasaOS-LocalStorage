@@ -284,7 +284,21 @@ func (s *LocalStorageService) CheckMergeMount() {
 			continue
 		}
 
-		if err := s.createMergeLocked(merge); err != nil {
+		err = s.createMergeLocked(merge)
+		if errors.Is(err, ErrMountPointIsNotEmpty) {
+			// only here, for a merge the box already has: a merge someone asks
+			// for through the API still refuses a mount point that is not empty
+			setAside, setAsideErr := s.setAsideForRestoreLocked(merge.MountPoint)
+			if setAside != "" {
+				logger.Error("the merge mount point was not empty: its contents were moved, not deleted", zap.String("mountPoint", merge.MountPoint), zap.String("movedTo", setAside))
+			}
+			if setAsideErr != nil {
+				logger.Error("failed to set aside the contents of the merge mount point", zap.Error(setAsideErr), zap.String("mountPoint", merge.MountPoint))
+			} else {
+				err = s.createMergeLocked(merge)
+			}
+		}
+		if err != nil {
 			logger.Error("failed to restore merge", zap.Error(err), zap.Any("merge", *merge))
 			s.recordMergeErrorLocked(merge.MountPoint, err)
 		} else {
