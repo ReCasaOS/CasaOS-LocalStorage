@@ -3,6 +3,9 @@ Description=Restore CasaOS storage layout before containers start
 Before=docker.service
 
 [Service]
+# The mergerfs process of /DATA is started from here. Stopping or updating this
+# service must not take /DATA away from the running apps (CasaOS#207).
+KillMode=process
 Type=oneshot
 TimeoutStartSec=300
 ExecStart=/usr/bin/casaos-local-storage -init

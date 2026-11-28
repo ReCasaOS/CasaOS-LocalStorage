@@ -4,6 +4,9 @@ After=casaos-message-bus.service
 Description=CasaOS Local Storage Service
 
 [Service]
+# The mergerfs process of /DATA is started from here. Stopping or updating this
+# service must not take /DATA away from the running apps (CasaOS#207).
+KillMode=process
 ExecStartPre=/usr/bin/casaos-local-storage -v
 ExecStart=/usr/bin/casaos-local-storage -c /etc/casaos/local-storage.conf
 PIDFile=/var/run/casaos/local-storage.pid

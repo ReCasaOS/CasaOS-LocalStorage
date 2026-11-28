@@ -12,6 +12,7 @@ type LocalStorageService struct {
 	_db          *gorm.DB
 	_mergeMu     sync.Mutex
 	_mergeErrors map[string]string
+	_setAsides   map[string]int // per mount point, how often its contents were set aside
 }
 
 func NewLocalStorageService(db *gorm.DB, mountinfo wrapper.MountInfoWrapper) *LocalStorageService {
@@ -19,5 +20,6 @@ func NewLocalStorageService(db *gorm.DB, mountinfo wrapper.MountInfoWrapper) *Lo
 		_mountinfo:   mountinfo,
 		_db:          db,
 		_mergeErrors: make(map[string]string),
+		_setAsides:   make(map[string]int),
 	}
 }
