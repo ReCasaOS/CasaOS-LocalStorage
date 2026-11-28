@@ -57,9 +57,14 @@ func setAsideStrayEntries(mountPoint string, root string, now time.Time) (string
 		return "", err
 	}
 
-	for _, entry := range entries {
+	for i, entry := range entries {
 		from := filepath.Join(mountPoint, entry.Name())
 		if err := os.Rename(from, filepath.Join(destination, entry.Name())); err != nil {
+			if i == 0 {
+				// nothing was moved (another filesystem, say): leave no empty folder
+				_ = os.Remove(destination)
+				return "", fmt.Errorf("move %s to %s: %w", from, destination, err)
+			}
 			return destination, fmt.Errorf("move %s to %s: %w", from, destination, err)
 		}
 	}
